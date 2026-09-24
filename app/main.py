@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
-from app.routers import telemetria
+from app.routers import chat, telemetria
 
 
 app = FastAPI(
@@ -31,6 +31,7 @@ app.add_middleware(
 
 # ─── Routers ──────────────────────────────────────────────────────────
 app.include_router(telemetria.router)
+app.include_router(chat.router)
 
 
 # ─── Endpoints base ───────────────────────────────────────────────────
@@ -43,6 +44,7 @@ async def root() -> dict[str, str]:
         "environment": settings.ENVIRONMENT,
         "status": "running",
         "docs": "/docs",
+        "websocket": "/ws/chat/{pedido_id}/{usuario_id}",
     }
 
 

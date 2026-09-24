@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
+from app.routers import telemetria
 
 
 app = FastAPI(
@@ -28,7 +29,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ─── Routers ──────────────────────────────────────────────────────────
+app.include_router(telemetria.router)
 
+
+# ─── Endpoints base ───────────────────────────────────────────────────
 @app.get("/", tags=["root"])
 async def root() -> dict[str, str]:
     """Endpoint raiz con informacion basica de la API."""

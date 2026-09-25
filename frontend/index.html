@@ -59,6 +59,92 @@
 </head>
 <body x-data="dashboardApp()" x-init="init()" x-cloak>
 
+<!-- ═══════════════════ OVERLAY: LOGIN ═══════════════════ -->
+<template x-if="!autenticado">
+  <div class="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950 p-4">
+    <div class="w-full max-w-md">
+      <!-- Logo -->
+      <div class="flex items-center justify-center gap-3 mb-8">
+        <div class="w-14 h-14 bg-blue-600 rounded-xl flex items-center justify-center text-white font-bold text-2xl shadow-lg">
+          S
+        </div>
+        <div>
+          <h1 class="text-2xl font-bold text-white">S.I.F.I.R.E. FuelLogistics</h1>
+          <p class="text-sm text-slate-400">Panel del Despachador</p>
+        </div>
+      </div>
+
+      <!-- Card de login -->
+      <div class="bg-slate-900 border border-slate-700 rounded-xl p-6 shadow-2xl">
+        <h2 class="text-lg font-semibold text-white mb-6">Iniciar Sesión</h2>
+
+        <template x-if="errorLogin">
+          <div class="mb-4 p-3 bg-red-500/20 border border-red-500/50 rounded-lg">
+            <p class="text-sm text-red-300" x-text="errorLogin"></p>
+          </div>
+        </template>
+
+        <form @submit.prevent="hacerLogin()" class="space-y-4">
+          <div>
+            <label class="block text-xs text-slate-400 uppercase tracking-wider mb-2">Email</label>
+            <input
+              type="email"
+              x-model="formLogin.email"
+              placeholder="usuario@sifire.com"
+              required
+              class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500"
+            />
+          </div>
+
+          <div>
+            <label class="block text-xs text-slate-400 uppercase tracking-wider mb-2">Contraseña</label>
+            <input
+              type="password"
+              x-model="formLogin.password"
+              placeholder="••••••••"
+              required
+              class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500"
+            />
+          </div>
+
+          <button
+            type="submit"
+            :disabled="cargandoLogin"
+            class="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-3 rounded-lg transition-colors flex items-center justify-center gap-2"
+          >
+            <template x-if="cargandoLogin">
+              <span class="inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+            </template>
+            <span x-text="cargandoLogin ? 'Ingresando...' : 'Ingresar'"></span>
+          </button>
+        </form>
+
+        <div class="mt-6 pt-6 border-t border-slate-800">
+          <p class="text-xs text-slate-500 text-center mb-3">Credenciales de prueba</p>
+          <div class="grid grid-cols-2 gap-2 text-xs">
+            <button
+              @click="formLogin.email = 'despachador@sifire.com'; formLogin.password = 'despachador123'"
+              class="bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-2 rounded border border-slate-700"
+            >
+              Despachador
+            </button>
+            <button
+              @click="formLogin.email = 'admin@sifire.com'; formLogin.password = 'admin123'"
+              class="bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-2 rounded border border-slate-700"
+            >
+              Admin
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <p class="text-center text-xs text-slate-600 mt-6">
+        S.I.F.I.R.E. Servicios Tecnológicos · v1.0.0
+      </p>
+    </div>
+  </div>
+</template>
+
 <!-- ═══════════════════ LAYOUT PRINCIPAL ═══════════════════ -->
 <div class="h-screen flex flex-col overflow-hidden">
 
@@ -88,6 +174,28 @@
       <div class="text-xs text-slate-400">
         <span x-text="pedidos.length"></span> pedidos
       </div>
+
+      <!-- Usuario autenticado -->
+      <template x-if="usuarioActual">
+        <div class="flex items-center gap-3 pl-3 border-l border-slate-700">
+          <div class="text-right">
+            <div class="text-xs font-semibold text-white" x-text="usuarioActual.nombre_completo"></div>
+            <div class="text-xs text-slate-500 uppercase tracking-wider" x-text="usuarioActual.rol"></div>
+          </div>
+          <div class="w-9 h-9 bg-slate-700 rounded-full flex items-center justify-center text-white text-sm font-bold">
+            <span x-text="usuarioActual.nombre_completo?.charAt(0).toUpperCase()"></span>
+          </div>
+          <button
+            @click="cerrarSesion()"
+            title="Cerrar sesión"
+            class="text-slate-400 hover:text-red-400 transition-colors p-1"
+          >
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
+            </svg>
+          </button>
+        </div>
+      </template>
     </div>
   </header>
 
@@ -851,6 +959,7 @@
 
 <!-- Scripts -->
 <script src="js/config.js"></script>
+<script src="js/auth.js"></script>
 <script src="js/websocket.js"></script>
 <script>
 function dashboardApp() {
@@ -871,6 +980,16 @@ function dashboardApp() {
     capaMarcadores: null,
     capaOrigenDestino: null,
     CONFIG: CONFIG,
+
+    // Estado de autenticacion
+    autenticado: false,
+    cargandoLogin: false,
+    errorLogin: null,
+    formLogin: {
+      email: '',
+      password: '',
+    },
+    usuarioActual: null,
 
     // Estado del modal
     modalNuevoPedido: false,
@@ -915,19 +1034,67 @@ function dashboardApp() {
     // ─── Inicialización ───────────────────────────────────────
     async init() {
       console.log('[App] Iniciando dashboard');
+
+      // Verificar si hay sesion activa
+      this.autenticado = AuthManager.estaAutenticado();
+      this.usuarioActual = AuthManager.getUsuario();
+
+      if (!this.autenticado) {
+        console.log('[App] Sin sesion. Mostrando login.');
+        return;
+      }
+
+      console.log('[App] Sesion activa:', this.usuarioActual?.email);
+
       this.initMapa();
       await this.verificarApi();
       await this.cargarPedidos();
       this.pollingTimer = setInterval(() => this.cargarPedidos(), CONFIG.POLL_INTERVAL_MS);
       this.pollingTimer = setInterval(() => this.verificarApi(), CONFIG.POLL_INTERVAL_MS);
 
-      // Reconectar WS al recuperar foco de la pestana
       document.addEventListener('visibilitychange', () => {
         if (!document.hidden && this.pedidoSeleccionado) {
           console.log('[App] Volviendo al foco, reconectando WS');
           this.conectarWebSocket(this.pedidoSeleccionado.id);
         }
       });
+    },
+
+    // ─── Autenticacion ────────────────────────────────────────
+    async hacerLogin() {
+      this.cargandoLogin = true;
+      this.errorLogin = null;
+
+      try {
+        const usuario = await AuthManager.login(
+          this.formLogin.email,
+          this.formLogin.password,
+          CONFIG.API_BASE_URL,
+        );
+        console.log('[App] Login OK:', usuario.email);
+
+        this.usuarioActual = usuario;
+        this.autenticado = true;
+
+        // Iniciar el dashboard
+        this.initMapa();
+        await this.verificarApi();
+        await this.cargarPedidos();
+        this.pollingTimer = setInterval(() => this.cargarPedidos(), CONFIG.POLL_INTERVAL_MS);
+        this.pollingTimer = setInterval(() => this.verificarApi(), CONFIG.POLL_INTERVAL_MS);
+
+      } catch (err) {
+        console.error('[App] Error de login:', err);
+        this.errorLogin = err.message || 'Error de autenticacion';
+      } finally {
+        this.cargandoLogin = false;
+      }
+    },
+
+    cerrarSesion() {
+      if (!confirm('¿Cerrar sesion?')) return;
+      AuthManager.logout();
+      window.location.reload();
     },
 
     // ─── Mapa ─────────────────────────────────────────────────
@@ -960,7 +1127,7 @@ function dashboardApp() {
       try {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 15000);
-        const res = await fetch(CONFIG.API_BASE_URL + CONFIG.ENDPOINTS.HEALTH, {
+        const res = await AuthManager.fetchAuth(CONFIG.API_BASE_URL + CONFIG.ENDPOINTS.HEALTH, {
           signal: controller.signal,
         });
         clearTimeout(timeout);
@@ -973,7 +1140,7 @@ function dashboardApp() {
 
     async cargarPedidos() {
       try {
-        const res = await fetch(CONFIG.API_BASE_URL + CONFIG.ENDPOINTS.PEDIDOS);
+        const res = await AuthManager.fetchAuth(CONFIG.API_BASE_URL + CONFIG.ENDPOINTS.PEDIDOS);
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const data = await res.json();
         this.pedidos = data.items;
@@ -1015,7 +1182,7 @@ function dashboardApp() {
 
     async cargarTelemetria(pedidoId) {
       try {
-        const res = await fetch(CONFIG.API_BASE_URL + CONFIG.ENDPOINTS.TELEMETRIA(pedidoId));
+        const res = await AuthManager.fetchAuth(CONFIG.API_BASE_URL + CONFIG.ENDPOINTS.TELEMETRIA(pedidoId));
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const puntos = await res.json();
         this.puntosTelemetria = puntos;
@@ -1102,7 +1269,12 @@ function dashboardApp() {
       const self = this;
       setTimeout(() => {
         console.log('[WS] Creando nuevo cliente para', pedidoId);
-        self.wsCliente = new ChatWebSocketClient(pedidoId, CONFIG.USUARIO_ID, {
+        const usuarioId = CONFIG.getUsuarioId();
+        if (!usuarioId) {
+          console.warn('[WS] Sin usuarioId, cancelando conexion');
+          return;
+        }
+        self.wsCliente = new ChatWebSocketClient(pedidoId, usuarioId, {
           onMessage: (msg) => self.recibirMensaje(msg),
           onStatusChange: (estado) => { self.wsEstado = estado; },
         });
@@ -1197,7 +1369,7 @@ function dashboardApp() {
           destino_lon: this.formPedido.destino_lon,
         };
 
-        const res = await fetch(`${CONFIG.API_BASE_URL}/api/v1/pedidos`, {
+        const res = await AuthManager.fetchAuth(`${CONFIG.API_BASE_URL}/api/v1/pedidos`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
@@ -1242,7 +1414,7 @@ function dashboardApp() {
       this.cambiandoEstado = true;
 
       try {
-        const res = await fetch(
+        const res = await AuthManager.fetchAuth(
           `${CONFIG.API_BASE_URL}/api/v1/pedidos/${this.pedidoSeleccionado.id}/estado`,
           {
             method: 'PATCH',
@@ -1332,7 +1504,7 @@ function dashboardApp() {
       this.errorModal = null;
 
       try {
-        const res = await fetch(
+        const res = await AuthManager.fetchAuth(
           `${CONFIG.API_BASE_URL}/api/v1/pedidos/${this.pedidoSeleccionado.id}/descarga`,
           {
             method: 'PATCH',
@@ -1385,7 +1557,7 @@ function dashboardApp() {
       this.errorModal = null;
 
       try {
-        const res = await fetch(
+        const res = await AuthManager.fetchAuth(
           `${CONFIG.API_BASE_URL}/api/v1/pedidos/${this.pedidoSeleccionado.id}/revisar-alerta`,
           {
             method: 'PATCH',
@@ -1449,7 +1621,7 @@ function dashboardApp() {
     nombreMostrar(msg) {
       if (msg.nombre) return msg.nombre;
       // Si es nuestro propio UUID, mostrar nuestro nombre
-      if (msg.usuario_id === CONFIG.USUARIO_ID) return CONFIG.NOMBRE_DESPACHADOR;
+      if (msg.usuario_id === CONFIG.getUsuarioId()) return CONFIG.NOMBRE_DESPACHADOR;
       // Fallback: primeros 8 chars del UUID
       return 'Usuario ' + msg.usuario_id.slice(0, 8);
     },

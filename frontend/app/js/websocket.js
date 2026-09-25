@@ -1,47 +1,39 @@
 /**
  * S.I.F.I.R.E. FuelLogistics - Cliente WebSocket para chat corporativo.
- * Maneja conexion, reconexion automatica y envio de mensajes.
+ * Version app del conductor: acepta callback getToken() para JWT.
  */
-// CONFIG local (para la app del conductor, no depende del panel del despachador)
-if (typeof CONFIG === 'undefined') {
-  window.CONFIG = {
-    API_BASE_URL: 'https://sifire-fuellogistics.onrender.com',
-    WS_BASE_URL: 'wss://sifire-fuellogistics.onrender.com',
-    ENDPOINTS: {
-      CHAT_WS: (pedidoId, usuarioId) => `/ws/chat/${pedidoId}/${usuarioId}`,
-    },
-  };
-}
-
 class ChatWebSocketClient {
   /**
    * @param {string} pedidoId - UUID del pedido
-   * @param {string} usuarioId - UUID del usuario (despachador)
-   * @param {object} callbacks - { onMessage, onStatusChange }
+   * @param {string} usuarioId - UUID del usuario (del token)
+   * @param {object} callbacks - { onMessage, onStatusChange, getToken }
    */
   constructor(pedidoId, usuarioId, callbacks = {}) {
     this.pedidoId = pedidoId;
     this.usuarioId = usuarioId;
     this.onMessage = callbacks.onMessage || (() => {});
     this.onStatusChange = callbacks.onStatusChange || (() => {});
+    this.getToken = callbacks.getToken || (() => localStorage.getItem('sifire_conductor_token') || '');
 
     this.ws = null;
     this.reconnectAttempts = 0;
     this.reconnectTimer = null;
     this.manualClose = false;
+
+    // Base URL: siempre apuntar a produccion (Render)
+    // Esto evita problemas cuando se sirve desde localhost sin Uvicorn activo
+    this.wsBase = 'wss://sifire-fuellogistics.onrender.com';
   }
 
-  /**
-   * Abre la conexion WebSocket.
-   */
   connect() {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       return;
     }
 
     this.manualClose = false;
-    const url = `${CONFIG.WS_BASE_URL}${CONFIG.ENDPOINTS.CHAT_WS(this.pedidoId, this.usuarioId)}`;
-    console.log('[WS] Conectando a', url);
+    const token = this.getToken();
+    const url = `${this.wsBase}/ws/chat/${this.pedidoId}/${this.usuarioId}?token=${token}`;
+    console.log('[WS] Conectando a', url.split('?')[0]);
     this.onStatusChange('conectando');
 
     try {
@@ -76,15 +68,20 @@ class ChatWebSocketClient {
     this.ws.onclose = (event) => {
       console.log('[WS] Conexion cerrada:', event.code, event.reason);
       this.onStatusChange('desconectado');
+
+      // Si el cierre fue por token invalido (1008) o forbidden (4003), no reconectar
+      if (event.code === 1008 || event.code === 4003) {
+        console.warn('[WS] Cierre por autenticacion. No reconectar.');
+        this.manualClose = true;
+        return;
+      }
+
       if (!this.manualClose) {
         this._scheduleReconnect();
       }
     };
   }
 
-  /**
-   * Programa una reconexion con backoff exponencial.
-   */
   _scheduleReconnect() {
     if (this.reconnectTimer) return;
 
@@ -99,10 +96,6 @@ class ChatWebSocketClient {
     }, delay);
   }
 
-  /**
-   * Envia un mensaje de texto al chat.
-   * @param {string} contenido
-   */
   send(contenido) {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       console.warn('[WS] No se puede enviar: socket no conectado');
@@ -118,9 +111,6 @@ class ChatWebSocketClient {
     return true;
   }
 
-  /**
-   * Cierra la conexion sin reconectar.
-   */
   disconnect() {
     this.manualClose = true;
     if (this.reconnectTimer) {
@@ -134,9 +124,6 @@ class ChatWebSocketClient {
     this.onStatusChange('cerrado');
   }
 
-  /**
-   * @returns {boolean} true si esta conectado.
-   */
   isConnected() {
     return this.ws && this.ws.readyState === WebSocket.OPEN;
   }

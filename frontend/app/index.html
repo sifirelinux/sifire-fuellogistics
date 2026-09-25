@@ -91,6 +91,19 @@
       ></span>
       <span class="text-xs text-slate-300" x-text="estadoConexion"></span>
     </div>
+
+    <!-- Boton bloquear (volver al PIN) -->
+    <template x-if="autenticado && pinDesbloqueado">
+      <button
+        @click="bloquearApp()"
+        title="Bloquear"
+        class="text-slate-400 hover:text-amber-400 transition-colors p-1"
+      >
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+        </svg>
+      </button>
+    </template>
   </div>
 </header>
 
@@ -98,8 +111,121 @@
 <main class="pt-20 pb-20 min-h-screen" style="padding-top: calc(5rem + env(safe-area-inset-top)); padding-bottom: calc(5rem + env(safe-area-inset-bottom));">
 
 
+  <!-- ══════════════ PANTALLA: LOGIN JWT ══════════════ -->
+  <div x-show="!autenticado" class="px-6 space-y-6 pt-8">
+    <div class="text-center">
+      <div class="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center text-white font-bold text-3xl mx-auto mb-4 shadow-xl">
+        S
+      </div>
+      <h1 class="text-xl font-bold text-white">SIFIRE Conductor</h1>
+      <p class="text-xs text-slate-500 mt-1">S.I.F.I.R.E. Servicios Tecnológicos</p>
+    </div>
+
+    <template x-if="errorLogin">
+      <div class="p-3 bg-red-500/20 border border-red-500/50 rounded-lg">
+        <p class="text-sm text-red-300" x-text="errorLogin"></p>
+      </div>
+    </template>
+
+    <form @submit.prevent="hacerLogin()" class="space-y-4">
+      <div>
+        <label class="block text-xs text-slate-400 mb-2 uppercase tracking-wider">Email</label>
+        <input
+          type="email"
+          x-model="formLogin.email"
+          placeholder="conductor@sifire.com"
+          required
+          class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500"
+        />
+      </div>
+
+      <div>
+        <label class="block text-xs text-slate-400 mb-2 uppercase tracking-wider">Contraseña</label>
+        <input
+          type="password"
+          x-model="formLogin.password"
+          placeholder="••••••••"
+          required
+          class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500"
+        />
+      </div>
+
+      <button
+        type="submit"
+        :disabled="cargandoLogin"
+        class="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold py-4 rounded-lg transition-colors flex items-center justify-center gap-2"
+      >
+        <template x-if="cargandoLogin">
+          <span class="inline-block w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+        </template>
+        <span x-text="cargandoLogin ? 'Ingresando...' : 'Ingresar'"></span>
+      </button>
+    </form>
+
+    <div class="bg-slate-900 border border-slate-800 rounded-lg p-3 text-xs text-slate-500">
+      <div class="font-semibold text-slate-400 mb-1">Credenciales de prueba:</div>
+      <div>conductor@sifire.com</div>
+      <div>conductor123</div>
+    </div>
+  </div>
+
+  <!-- ══════════════ PANTALLA: PIN (segunda capa) ══════════════ -->
+  <div x-show="autenticado && !pinDesbloqueado" class="px-6 space-y-6 pt-8">
+    <div class="text-center">
+      <div class="w-14 h-14 bg-green-500/20 border border-green-500/50 rounded-full mx-auto mb-4 flex items-center justify-center">
+        <svg class="w-7 h-7 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+        </svg>
+      </div>
+      <h2 class="text-lg font-bold text-white">Sesión iniciada</h2>
+      <p class="text-xs text-slate-400 mt-1" x-text="usuarioActual?.nombre_completo"></p>
+      <p class="text-xs text-slate-500 mt-3">Ingresa tu PIN para desbloquear</p>
+    </div>
+
+    <div class="flex justify-center gap-3 my-8">
+      <template x-for="i in 4" :key="i">
+        <div :class="pinIngresado.length >= i ? 'filled' : ''" class="pin-dot"></div>
+      </template>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 max-w-xs mx-auto">
+      <template x-for="n in [1,2,3,4,5,6,7,8,9]" :key="n">
+        <button
+          @click="ingresarPin(n)"
+          class="keypad-btn bg-slate-800 hover:bg-slate-700 text-white text-xl font-bold py-5 rounded-xl border border-slate-700"
+          x-text="n"
+        ></button>
+      </template>
+
+      <button
+        @click="limpiarPin()"
+        class="keypad-btn bg-slate-800 hover:bg-slate-700 text-slate-400 text-sm font-semibold py-5 rounded-xl border border-slate-700"
+      >
+        C
+      </button>
+
+      <button
+        @click="ingresarPin(0)"
+        class="keypad-btn bg-slate-800 hover:bg-slate-700 text-white text-xl font-bold py-5 rounded-xl border border-slate-700"
+      >
+        0
+      </button>
+
+      <button
+        @click="borrarPin()"
+        class="keypad-btn bg-slate-800 hover:bg-slate-700 text-slate-400 text-xl font-bold py-5 rounded-xl border border-slate-700"
+      >
+        ⌫
+      </button>
+    </div>
+
+    <div class="text-center text-xs text-slate-600 mt-6">
+      <button @click="hacerLogout()" class="underline">Cerrar sesión</button>
+    </div>
+  </div>
+
   <!-- ══════════════ TAB: DASHBOARD ══════════════ -->
-  <div x-show="tabActiva === 'dashboard'" class="px-4 space-y-4">
+  <div x-show="autenticado && pinDesbloqueado && tabActiva === 'dashboard'" class="px-4 space-y-4">
 
     <!-- Pedido activo -->
     <template x-if="!pedidoActivo">
@@ -211,8 +337,8 @@
 
   </div>
 
-  <!-- ══════════════ TAB: PIN ══════════════ -->
-  <div x-show="tabActiva === 'pin'" class="px-4 space-y-4">
+  <!-- ══════════════ TAB: PERFIL ══════════════ -->
+  <div x-show="autenticado && pinDesbloqueado && tabActiva === 'pin'" class="px-4 space-y-4">
 
     <template x-if="!autenticado">
       <div>
@@ -286,7 +412,7 @@
   </div>
 
   <!-- ══════════════ TAB: CHAT ══════════════ -->
-  <div x-show="tabActiva === 'chat'" class="flex flex-col h-full">
+  <div x-show="autenticado && pinDesbloqueado && tabActiva === 'chat'" class="flex flex-col h-full">
 
     <template x-if="!pedidoActivo">
       <div class="px-4 py-12 text-center">

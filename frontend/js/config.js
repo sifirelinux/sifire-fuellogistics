@@ -25,9 +25,13 @@ const CONFIG = Object.freeze({
     HEALTH: '/health',
   },
 
-  // ID unico del despachador (sesion actual del navegador)
-  // Se regenera cada vez que se recarga la pagina
-  USUARIO_ID: crypto.randomUUID(),
+  // ID del despachador (extraido del token JWT en localStorage)
+  // Se resuelve dinamicamente con la funcion getUsuarioId()
+  getUsuarioId: function() {
+    if (typeof AuthManager === 'undefined') return null;
+    const usuario = AuthManager.getUsuario();
+    return usuario ? usuario.id : null;
+  },
 
   // Nombre visible del despachador (siempre el mismo en el chat)
   NOMBRE_DESPACHADOR: 'Despachador Central',

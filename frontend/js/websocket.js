@@ -29,8 +29,11 @@ class ChatWebSocketClient {
     }
 
     this.manualClose = false;
-    const url = `${CONFIG.WS_BASE_URL}${CONFIG.ENDPOINTS.CHAT_WS(this.pedidoId, this.usuarioId)}`;
-    console.log('[WS] Conectando a', url);
+    const token = (typeof AuthManager !== 'undefined' && AuthManager.getToken())
+      ? AuthManager.getToken()
+      : '';
+    const url = `${CONFIG.WS_BASE_URL}${CONFIG.ENDPOINTS.CHAT_WS(this.pedidoId, this.usuarioId)}?token=${token}`;
+    console.log('[WS] Conectando a', url.split('?')[0]);
     this.onStatusChange('conectando');
 
     try {

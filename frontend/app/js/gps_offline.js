@@ -205,9 +205,13 @@ class GPSManager {
       puntos: [punto],
     };
 
+    const token = localStorage.getItem('sifire_conductor_token') || '';
     const res = await fetch(`${this.apiBase}/api/v1/telemetria/sync-batch`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
       body: JSON.stringify(payload),
     });
 
@@ -241,9 +245,13 @@ class GPSManager {
     console.log(`[GPS] Enviando lote de ${lote.length} puntos...`);
 
     try {
+      const token = localStorage.getItem('sifire_conductor_token') || '';
       const res = await fetch(`${this.apiBase}/api/v1/telemetria/sync-batch`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
         body: JSON.stringify(payload),
       });
 

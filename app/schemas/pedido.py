@@ -28,6 +28,7 @@ class PedidoResumen(BaseModel):
     destino_lat: float
     destino_lon: float
     discrepancia_pct: float | None = None
+    vehiculo_placa: str | None = None
     created_at: datetime
 
 
@@ -55,6 +56,7 @@ class PedidoDetalle(BaseModel):
     odometro_final_km: float | None = None
 
     precintos: dict = Field(default_factory=dict)
+    vehiculo_placa: str | None = None
 
     merma_teorica_l: float | None = None
     merma_real_l: float | None = None
@@ -62,6 +64,25 @@ class PedidoDetalle(BaseModel):
 
     created_at: datetime
     updated_at: datetime
+
+
+class PedidoCreate(BaseModel):
+    """Payload para crear un nuevo pedido."""
+    tipo_combustible: TipoCombustible
+    volumen_cargado_l: float = Field(..., gt=0, le=60000)
+    temperatura_carga_c: float = Field(..., ge=-10, le=60)
+
+    origen_nombre: str = Field(..., min_length=3, max_length=200)
+    origen_lat: float = Field(..., ge=-90, le=90)
+    origen_lon: float = Field(..., ge=-180, le=180)
+
+    destino_nombre: str = Field(..., min_length=3, max_length=200)
+    destino_lat: float = Field(..., ge=-90, le=90)
+    destino_lon: float = Field(..., ge=-180, le=180)
+
+    odometro_inicial_km: float = Field(..., ge=0)
+    precintos: dict[str, str] = Field(default_factory=dict)
+    vehiculo_placa: str | None = Field(default=None, max_length=16)
 
 
 class PedidoListResponse(BaseModel):

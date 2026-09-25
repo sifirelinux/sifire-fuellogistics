@@ -70,6 +70,8 @@ class Pedido(Base, UUIDMixin, TimestampMixin):
     odometro_inicial_km: Mapped[float] = mapped_column(Numeric(12, 2))
     odometro_final_km: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
 
+    vehiculo_placa: Mapped[str | None] = mapped_column(String(16), nullable=True)
+
     estado: Mapped[EstadoPedido] = mapped_column(
         SAEnum(EstadoPedido, name="estado_pedido_enum"),
         default=EstadoPedido.SOLICITADO, index=True,

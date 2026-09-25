@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from sqlalchemy import func, select
@@ -9,13 +10,83 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
 from app.models.fuel import EstadoPedido, Pedido
-from app.schemas.pedido import PedidoDetalle, PedidoListResponse, PedidoResumen
+from app.schemas.pedido import (
+    PedidoCreate,
+    PedidoDetalle,
+    PedidoListResponse,
+    PedidoResumen,
+)
+from app.services.pedidos import (
+    calcular_expiracion_qr,
+    distancia_haversine_km,
+    generar_codigo_pedido,
+    generar_qr_token,
+)
 
 
 router = APIRouter(
     prefix="/api/v1/pedidos",
     tags=["pedidos"],
 )
+
+
+@router.post(
+    "",
+    response_model=PedidoDetalle,
+    status_code=status.HTTP_201_CREATED,
+    summary="Crear un nuevo pedido",
+    description=(
+        "Crea un pedido en estado SOLICITADO, con codigo secuencial "
+        "(PED-YYYY-NNNN) y QR token con expiracion dinamica segun distancia."
+    ),
+)
+async def crear_pedido(
+    pedido_in: PedidoCreate,
+    db: AsyncSession = Depends(get_db),
+) -> PedidoDetalle:
+    """Crea un nuevo pedido en estado SOLICITADO."""
+    # Generar ID antes de construir el objeto
+    pedido_id = uuid.uuid4()
+
+    # Codigo secuencial
+    codigo = await generar_codigo_pedido(db)
+
+    # Distancia Haversine y expiracion dinamica
+    distancia_km = distancia_haversine_km(
+        pedido_in.origen_lat,
+        pedido_in.origen_lon,
+        pedido_in.destino_lat,
+        pedido_in.destino_lon,
+    )
+    duracion_qr = calcular_expiracion_qr(distancia_km)
+    qr_token = generar_qr_token(str(pedido_id))
+    qr_expira = datetime.now(timezone.utc) + duracion_qr
+
+    pedido = Pedido(
+        id=pedido_id,
+        codigo=codigo,
+        qr_token=qr_token,
+        qr_token_expira=qr_expira,
+        tipo_combustible=pedido_in.tipo_combustible,
+        volumen_cargado_l=pedido_in.volumen_cargado_l,
+        temperatura_carga_c=pedido_in.temperatura_carga_c,
+        origen_nombre=pedido_in.origen_nombre,
+        origen_lat=pedido_in.origen_lat,
+        origen_lon=pedido_in.origen_lon,
+        destino_nombre=pedido_in.destino_nombre,
+        destino_lat=pedido_in.destino_lat,
+        destino_lon=pedido_in.destino_lon,
+        precintos=pedido_in.precintos,
+        odometro_inicial_km=pedido_in.odometro_inicial_km,
+        vehiculo_placa=pedido_in.vehiculo_placa,
+        estado=EstadoPedido.SOLICITADO,
+    )
+
+    db.add(pedido)
+    await db.commit()
+    await db.refresh(pedido)
+
+    return PedidoDetalle.model_validate(pedido)
 
 
 @router.get(

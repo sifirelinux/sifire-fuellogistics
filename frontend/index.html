@@ -104,6 +104,17 @@
         <p class="text-xs text-slate-500 mt-1">Actualización cada <span x-text="CONFIG.POLL_INTERVAL_MS / 1000"></span>s</p>
       </div>
 
+      <!-- Botón nuevo despacho -->
+      <div class="px-3 py-3 border-b border-slate-700">
+        <button
+          @click="abrirModalNuevo()"
+          class="w-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold py-2 rounded-lg transition-colors flex items-center justify-center gap-2"
+        >
+          <span class="text-base leading-none">+</span>
+          <span>Nuevo Despacho</span>
+        </button>
+      </div>
+
       <!-- Lista de pedidos -->
       <div class="flex-1 overflow-y-auto scroll-fino">
 
@@ -375,6 +386,197 @@
   </div>
 </div>
 
+<!-- ═══ MODAL: NUEVO DESPACHO ═══ -->
+<template x-if="modalNuevoPedido">
+  <div
+    class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4"
+    @click.self="cerrarModalNuevo()"
+  >
+    <div class="bg-slate-900 border border-slate-700 rounded-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto scroll-fino shadow-2xl">
+
+      <!-- Header -->
+      <div class="flex items-center justify-between px-6 py-4 border-b border-slate-700 sticky top-0 bg-slate-900 z-10">
+        <h3 class="text-lg font-bold text-white">Crear Nuevo Despacho</h3>
+        <button @click="cerrarModalNuevo()" class="text-slate-400 hover:text-white transition-colors">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Error -->
+      <template x-if="errorModal">
+        <div class="mx-6 mt-4 p-3 bg-red-500/20 border border-red-500/50 rounded-lg">
+          <p class="text-sm text-red-300" x-text="errorModal"></p>
+        </div>
+      </template>
+
+      <!-- Formulario -->
+      <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+
+        <!-- Columna 1: Datos de Carga -->
+        <div>
+          <h4 class="text-sm font-bold text-slate-300 uppercase tracking-wider mb-4">Datos de Carga</h4>
+
+          <div class="space-y-4">
+            <div>
+              <label class="block text-xs text-slate-400 mb-1">Tipo de combustible</label>
+              <select
+                x-model="formPedido.tipo_combustible"
+                class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-blue-500"
+              >
+                <option value="GASOLINA_95">Gasolina 95</option>
+                <option value="GASOLINA_91">Gasolina 91</option>
+                <option value="DIESEL">Diésel</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-xs text-slate-400 mb-1">Volumen (L)</label>
+              <input
+                type="number"
+                step="0.1"
+                x-model.number="formPedido.volumen_cargado_l"
+                class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-blue-500"
+              />
+            </div>
+
+            <div>
+              <label class="block text-xs text-slate-400 mb-1">Temperatura de carga (°C)</label>
+              <input
+                type="number"
+                step="0.1"
+                x-model.number="formPedido.temperatura_carga_c"
+                class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-blue-500"
+              />
+            </div>
+
+            <div>
+              <label class="block text-xs text-slate-400 mb-1">Placa del vehículo</label>
+              <input
+                type="text"
+                x-model="formPedido.vehiculo_placa"
+                maxlength="16"
+                placeholder="AA123BB"
+                class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500"
+              />
+            </div>
+
+            <div>
+              <label class="block text-xs text-slate-400 mb-1">Odómetro inicial (km)</label>
+              <input
+                type="number"
+                step="0.1"
+                x-model.number="formPedido.odometro_inicial_km"
+                class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-blue-500"
+              />
+            </div>
+
+            <div>
+              <label class="block text-xs text-slate-400 mb-1">Precintos (clave:valor, separados por coma)</label>
+              <input
+                type="text"
+                x-model="formPedido.precintos"
+                placeholder="precinto_1:ABC123, precinto_2:XYZ789"
+                class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500"
+              />
+            </div>
+          </div>
+        </div>
+
+        <!-- Columna 2: Ruta -->
+        <div>
+          <h4 class="text-sm font-bold text-slate-300 uppercase tracking-wider mb-4">Ruta</h4>
+
+          <div class="space-y-4">
+            <div class="bg-slate-800/50 rounded p-3 border border-slate-700">
+              <div class="text-xs font-semibold text-blue-400 mb-2">ORIGEN</div>
+              <div class="space-y-2">
+                <input
+                  type="text"
+                  x-model="formPedido.origen_nombre"
+                  placeholder="Nombre del origen"
+                  class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                />
+                <div class="grid grid-cols-2 gap-2">
+                  <input
+                    type="number"
+                    step="0.0001"
+                    x-model.number="formPedido.origen_lat"
+                    placeholder="Lat"
+                    class="bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                  />
+                  <input
+                    type="number"
+                    step="0.0001"
+                    x-model.number="formPedido.origen_lon"
+                    placeholder="Lon"
+                    class="bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div class="bg-slate-800/50 rounded p-3 border border-slate-700">
+              <div class="text-xs font-semibold text-amber-400 mb-2">DESTINO</div>
+              <div class="space-y-2">
+                <input
+                  type="text"
+                  x-model="formPedido.destino_nombre"
+                  placeholder="Nombre del destino"
+                  class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                />
+                <div class="grid grid-cols-2 gap-2">
+                  <input
+                    type="number"
+                    step="0.0001"
+                    x-model.number="formPedido.destino_lat"
+                    placeholder="Lat"
+                    class="bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                  />
+                  <input
+                    type="number"
+                    step="0.0001"
+                    x-model.number="formPedido.destino_lon"
+                    placeholder="Lon"
+                    class="bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div class="text-xs text-slate-500">
+              La duración del token QR se calcula automáticamente según la distancia.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div class="flex items-center justify-end gap-3 px-6 py-4 border-t border-slate-700 bg-slate-900 sticky bottom-0">
+        <button
+          @click="cerrarModalNuevo()"
+          :disabled="guardandoPedido"
+          class="px-4 py-2 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white text-sm font-semibold rounded-lg transition-colors"
+        >
+          Cancelar
+        </button>
+        <button
+          @click="crearPedido()"
+          :disabled="guardandoPedido"
+          class="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-lg transition-colors flex items-center gap-2"
+        >
+          <template x-if="guardandoPedido">
+            <span class="inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+          </template>
+          <span x-text="guardandoPedido ? 'Creando...' : 'Crear Pedido'"></span>
+        </button>
+      </div>
+
+    </div>
+  </div>
+</template>
+
 <!-- Scripts -->
 <script src="js/config.js"></script>
 <script src="js/websocket.js"></script>
@@ -397,6 +599,25 @@ function dashboardApp() {
     capaMarcadores: null,
     capaOrigenDestino: null,
     CONFIG: CONFIG,
+
+    // Estado del modal
+    modalNuevoPedido: false,
+    guardandoPedido: false,
+    errorModal: null,
+    formPedido: {
+      tipo_combustible: 'DIESEL',
+      volumen_cargado_l: 10000,
+      temperatura_carga_c: 25.0,
+      vehiculo_placa: 'AA123BB',
+      odometro_inicial_km: 125000.0,
+      precintos: 'precinto_1:ABC123, precinto_2:XYZ789',
+      origen_nombre: 'Planta Yagua - Carabobo',
+      origen_lat: 10.25,
+      origen_lon: -67.95,
+      destino_nombre: 'Estacion Servicio Caracas - Distrito Capital',
+      destino_lat: 10.4806,
+      destino_lon: -66.9036,
+    },
 
     // ─── Inicialización ───────────────────────────────────────
     async init() {
@@ -589,6 +810,99 @@ function dashboardApp() {
       }
 
       this.nuevoMensaje = '';
+    },
+
+    // ─── Modal Nuevo Despacho ─────────────────────────────────
+    abrirModalNuevo() {
+      this.errorModal = null;
+      this.modalNuevoPedido = true;
+    },
+
+    cerrarModalNuevo() {
+      if (this.guardandoPedido) return;
+      this.modalNuevoPedido = false;
+      this.errorModal = null;
+    },
+
+    resetFormPedido() {
+      this.formPedido = {
+        tipo_combustible: 'DIESEL',
+        volumen_cargado_l: 10000,
+        temperatura_carga_c: 25.0,
+        vehiculo_placa: 'AA123BB',
+        odometro_inicial_km: 125000.0,
+        precintos: 'precinto_1:ABC123, precinto_2:XYZ789',
+        origen_nombre: 'Planta Yagua - Carabobo',
+        origen_lat: 10.25,
+        origen_lon: -67.95,
+        destino_nombre: 'Estacion Servicio Caracas - Distrito Capital',
+        destino_lat: 10.4806,
+        destino_lon: -66.9036,
+      };
+    },
+
+    async crearPedido() {
+      this.guardandoPedido = true;
+      this.errorModal = null;
+
+      try {
+        // Parsear precintos "clave:valor, clave:valor" a objeto
+        const precintos = {};
+        if (this.formPedido.precintos) {
+          this.formPedido.precintos.split(',').forEach((pair) => {
+            const partes = pair.trim().split(':');
+            if (partes.length === 2) {
+              precintos[partes[0].trim()] = partes[1].trim();
+            }
+          });
+        }
+
+        const payload = {
+          tipo_combustible: this.formPedido.tipo_combustible,
+          volumen_cargado_l: this.formPedido.volumen_cargado_l,
+          temperatura_carga_c: this.formPedido.temperatura_carga_c,
+          vehiculo_placa: this.formPedido.vehiculo_placa || null,
+          odometro_inicial_km: this.formPedido.odometro_inicial_km,
+          precintos: precintos,
+          origen_nombre: this.formPedido.origen_nombre,
+          origen_lat: this.formPedido.origen_lat,
+          origen_lon: this.formPedido.origen_lon,
+          destino_nombre: this.formPedido.destino_nombre,
+          destino_lat: this.formPedido.destino_lat,
+          destino_lon: this.formPedido.destino_lon,
+        };
+
+        const res = await fetch(`${CONFIG.API_BASE_URL}/api/v1/pedidos`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
+          throw new Error(err.detail || 'Error creando pedido');
+        }
+
+        const nuevoPedido = await res.json();
+        console.log('[App] Pedido creado:', nuevoPedido.codigo);
+
+        // Insertar al inicio
+        this.pedidos.unshift(nuevoPedido);
+
+        // Cerrar modal y resetear form
+        this.modalNuevoPedido = false;
+        this.errorModal = null;
+        this.resetFormPedido();
+
+        // Seleccionar el nuevo pedido
+        await this.seleccionarPedido(nuevoPedido);
+
+      } catch (err) {
+        console.error('[App] Error creando pedido:', err);
+        this.errorModal = err.message || 'Error desconocido';
+      } finally {
+        this.guardandoPedido = false;
+      }
     },
 
     // ─── Helpers de presentación ──────────────────────────────

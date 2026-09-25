@@ -57,6 +57,7 @@ class PedidoDetalle(BaseModel):
 
     precintos: dict = Field(default_factory=dict)
     vehiculo_placa: str | None = None
+    observaciones_descarga: str | None = None
 
     merma_teorica_l: float | None = None
     merma_real_l: float | None = None
@@ -83,6 +84,30 @@ class PedidoCreate(BaseModel):
     odometro_inicial_km: float = Field(..., ge=0)
     precintos: dict[str, str] = Field(default_factory=dict)
     vehiculo_placa: str | None = Field(default=None, max_length=16)
+
+
+class PedidoEstadoUpdate(BaseModel):
+    """Payload para cambiar el estado de un pedido.
+
+    Solo permite transiciones manuales: EN_TRANSITO, DESPACHANDO, CANCELADO.
+    Los estados COMPLETADO y ALERTA_MERMA se asignan automaticamente
+    al registrar la descarga o al revisar una alerta.
+    """
+    estado: EstadoPedido
+
+
+class PedidoDescargaUpdate(BaseModel):
+    """Payload para registrar la descarga en destino."""
+    volumen_recibido_l: float = Field(..., gt=0, le=60000)
+    temperatura_descarga_c: float = Field(..., ge=-10, le=60)
+    odometro_final_km: float = Field(..., ge=0)
+    observaciones_descarga: str | None = Field(default=None, max_length=255)
+
+
+class PedidoRevisionAlerta(BaseModel):
+    """Payload para que un supervisor autorice cerrar una alerta de merma."""
+    autorizado_por: str = Field(..., min_length=3, max_length=100)
+    observaciones: str | None = Field(default=None, max_length=500)
 
 
 class PedidoListResponse(BaseModel):

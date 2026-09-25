@@ -84,6 +84,8 @@ class Pedido(Base, UUIDMixin, TimestampMixin):
     firma_conductor: Mapped[str | None] = mapped_column(Text, nullable=True)
     firma_receptor: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    observaciones_descarga: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
     telemetrias: Mapped[list["TelemetriaRuta"]] = relationship(
         back_populates="pedido", cascade="all, delete-orphan"
     )

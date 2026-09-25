@@ -1,12 +1,17 @@
-"""Router FastAPI con endpoint WebSocket para chat corporativo."""
+"""Router FastAPI con endpoint WebSocket para chat corporativo.
+
+El WebSocket requiere autenticacion via JWT en query param:
+    WS /ws/chat/{pedido_id}/{usuario_id}?token={jwt}
+"""
 from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 from pydantic import ValidationError
 
+from app.core.security import decodificar_token
 from app.schemas.chat import (
     MensajeChatIn,
     MensajeChatOut,
@@ -24,22 +29,41 @@ router = APIRouter(
 
 sanitizer = MessageSanitizer()
 
+ROLES_VALIDOS_CHAT = {"CONDUCTOR", "DESPACHADOR", "SUPERVISOR", "ADMIN"}
+
 
 @router.websocket("/chat/{pedido_id}/{usuario_id}")
 async def chat_websocket(
     websocket: WebSocket,
     pedido_id: uuid.UUID,
     usuario_id: uuid.UUID,
+    token: str = Query(..., description="JWT del usuario autenticado"),
 ) -> None:
-    """Canal de chat corporativo por pedido.
+    """Canal de chat corporativo por pedido con autenticacion JWT."""
+    # 1. Validar token
+    try:
+        payload = decodificar_token(token)
+    except ValueError:
+        await websocket.close(code=4001, reason="Token invalido o expirado")
+        return
 
-    - Broadcast entre conductor, despachador y supervisor.
-    - Sanitiza automaticamente telefonos, emails y cuentas bancarias.
-    - Acepta campo opcional 'nombre' para mostrar etiqueta amigable.
-    """
+    # 2. Validar que sub == usuario_id
+    if payload.get("sub") != str(usuario_id):
+        await websocket.close(
+            code=4003,
+            reason="El usuario_id de la URL no coincide con el token",
+        )
+        return
+
+    # 3. Validar rol
+    rol = payload.get("rol")
+    if rol not in ROLES_VALIDOS_CHAT:
+        await websocket.close(code=4003, reason=f"Rol {rol} no autorizado")
+        return
+
+    # 4. Aceptar conexion
     await manager.conectar(pedido_id, usuario_id, websocket)
 
-    # Notificar entrada al resto
     bienvenida = MensajeSistema(
         contenido=f"Usuario {usuario_id} se ha conectado.",
         timestamp=datetime.now(timezone.utc),
@@ -91,7 +115,6 @@ async def _procesar_mensaje(
     websocket: WebSocket,
 ) -> None:
     """Valida, sanitiza y difunde un mensaje entrante."""
-    # 1. Validar con Pydantic
     try:
         mensaje_in = MensajeChatIn.model_validate(data)
     except ValidationError as exc:
@@ -102,10 +125,8 @@ async def _procesar_mensaje(
         })
         return
 
-    # 2. Sanitizar contenido
     resultado = sanitizer.sanitizar(mensaje_in.contenido)
 
-    # 3. Construir mensaje saliente
     mensaje_out = MensajeChatOut(
         id=uuid.uuid4(),
         pedido_id=pedido_id,
@@ -119,7 +140,6 @@ async def _procesar_mensaje(
         timestamp=datetime.now(timezone.utc),
     )
 
-    # 4. Broadcast a todos (incluido el emisor)
     await manager.broadcast(
         pedido_id,
         mensaje_out.model_dump(mode="json"),

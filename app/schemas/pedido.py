@@ -22,7 +22,11 @@ class PedidoResumen(BaseModel):
     temperatura_carga_c: float
     temperatura_descarga_c: float | None = None
     origen_nombre: str
+    origen_lat: float
+    origen_lon: float
     destino_nombre: str
+    destino_lat: float
+    destino_lon: float
     discrepancia_pct: float | None = None
     created_at: datetime
 

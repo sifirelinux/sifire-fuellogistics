@@ -978,20 +978,27 @@ function dashboardApp() {
 
     // ─── Selección de pedido ──────────────────────────────────
     async seleccionarPedido(pedido) {
+      // Si es el mismo pedido ya seleccionado, no hacer nada
+      if (this.pedidoSeleccionado && this.pedidoSeleccionado.id === pedido.id) {
+        // Pero sí actualizar el objeto (por si cambió de estado)
+        this.pedidoSeleccionado = pedido;
+        return;
+      }
+
+      const esMismoPedido = this.wsCliente && this.wsCliente.pedidoId === pedido.id;
+
       this.pedidoSeleccionado = pedido;
-      this.mensajesChat = [];
       this.puntosTelemetria = [];
 
-      // Desconectar WS anterior
-      if (this.wsCliente) {
-        this.wsCliente.disconnect();
-        this.wsCliente = null;
+      // Solo limpiar mensajes si cambiamos de pedido
+      if (!esMismoPedido) {
+        this.mensajesChat = [];
       }
 
       // Cargar telemetría
       await this.cargarTelemetria(pedido.id);
 
-      // Conectar WS nuevo
+      // Conectar WS (el guard evita reconexiones innecesarias)
       this.conectarWebSocket(pedido.id);
 
       // Reencuadrar mapa
@@ -1070,12 +1077,29 @@ function dashboardApp() {
 
     // ─── WebSocket ────────────────────────────────────────────
     conectarWebSocket(pedidoId) {
+      // Si ya hay un cliente conectado al mismo pedido, no reconectar
+      if (this.wsCliente && this.wsCliente.pedidoId === pedidoId) {
+        console.log('[WS] Ya conectado al pedido', pedidoId, '- omitiendo');
+        return;
+      }
+
+      // Desconectar cliente anterior si existe
+      if (this.wsCliente) {
+        console.log('[WS] Desconectando cliente anterior');
+        this.wsCliente.disconnect();
+        this.wsCliente = null;
+      }
+
+      // Esperar un poco antes de conectar (dejar al backend limpiar la conexión vieja)
       const self = this;
-      this.wsCliente = new ChatWebSocketClient(pedidoId, CONFIG.USUARIO_ID, {
-        onMessage: (msg) => self.recibirMensaje(msg),
-        onStatusChange: (estado) => { self.wsEstado = estado; },
-      });
-      this.wsCliente.connect();
+      setTimeout(() => {
+        console.log('[WS] Creando nuevo cliente para', pedidoId);
+        self.wsCliente = new ChatWebSocketClient(pedidoId, CONFIG.USUARIO_ID, {
+          onMessage: (msg) => self.recibirMensaje(msg),
+          onStatusChange: (estado) => { self.wsEstado = estado; },
+        });
+        self.wsCliente.connect();
+      }, 300);
     },
 
     recibirMensaje(msg) {

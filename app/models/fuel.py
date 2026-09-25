@@ -121,6 +121,12 @@ class TelemetriaRuta(Base, UUIDMixin):
     timestamp_gps: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     timestamp_sync: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     dispositivo_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    conductor_id: Mapped[uuid.UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("usuarios.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
 
     pedido: Mapped["Pedido"] = relationship(back_populates="telemetrias")
 

@@ -8,8 +8,10 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.dependencies import require_roles
 from app.db.session import get_db
 from app.models.fuel import EstadoPedido, Pedido
+from app.models.user import RolUsuario
 from app.schemas.pedido import (
     PedidoCreate,
     PedidoDescargaUpdate,
@@ -41,8 +43,12 @@ router = APIRouter(
     summary="Crear un nuevo pedido",
     description=(
         "Crea un pedido en estado SOLICITADO, con codigo secuencial "
-        "(PED-YYYY-NNNN) y QR token con expiracion dinamica segun distancia."
+        "(PED-YYYY-NNNN) y QR token con expiracion dinamica segun distancia. "
+        "Requiere rol DESPACHADOR, SUPERVISOR o ADMIN."
     ),
+    dependencies=[Depends(require_roles(
+        RolUsuario.DESPACHADOR, RolUsuario.SUPERVISOR, RolUsuario.ADMIN
+    ))],
 )
 async def crear_pedido(
     pedido_in: PedidoCreate,
@@ -97,7 +103,11 @@ async def crear_pedido(
     "",
     response_model=PedidoListResponse,
     summary="Listar pedidos",
-    description="Devuelve una lista paginada de pedidos, opcionalmente filtrados por estado.",
+    description="Devuelve una lista paginada de pedidos, opcionalmente filtrados por estado. "
+    "Requiere autenticacion.",
+    dependencies=[Depends(require_roles(
+        RolUsuario.DESPACHADOR, RolUsuario.SUPERVISOR, RolUsuario.ADMIN
+    ))],
 )
 async def listar_pedidos(
     estado: EstadoPedido | None = Query(None, description="Filtrar por estado"),
@@ -133,7 +143,12 @@ async def listar_pedidos(
     "/{pedido_id}",
     response_model=PedidoDetalle,
     summary="Detalle de un pedido",
-    description="Devuelve toda la informacion de un pedido especifico.",
+    description="Devuelve toda la informacion de un pedido especifico. "
+    "Requiere autenticacion.",
+    dependencies=[Depends(require_roles(
+        RolUsuario.CONDUCTOR, RolUsuario.DESPACHADOR,
+        RolUsuario.SUPERVISOR, RolUsuario.ADMIN
+    ))],
 )
 async def obtener_pedido(
     pedido_id: uuid.UUID = Path(..., description="UUID del pedido"),
@@ -169,8 +184,12 @@ TRANSICIONES_MANUALES_PERMITIDAS = {
     summary="Cambiar el estado de un pedido",
     description=(
         "Permite cambiar manualmente el estado a EN_TRANSITO, DESPACHANDO o CANCELADO. "
-        "Los estados COMPLETADO y ALERTA_MERMA solo se asignan automaticamente."
+        "Los estados COMPLETADO y ALERTA_MERMA solo se asignan automaticamente. "
+        "Requiere rol DESPACHADOR, SUPERVISOR o ADMIN."
     ),
+    dependencies=[Depends(require_roles(
+        RolUsuario.DESPACHADOR, RolUsuario.SUPERVISOR, RolUsuario.ADMIN
+    ))],
 )
 async def cambiar_estado(
     pedido_id: uuid.UUID = Path(..., description="UUID del pedido"),
@@ -215,8 +234,12 @@ async def cambiar_estado(
     summary="Registrar la descarga en destino",
     description=(
         "Registra el volumen y temperatura de descarga, ejecuta la auditoria "
-        "volumetrica ASTM D1250, y actualiza el estado a COMPLETADO o ALERTA_MERMA."
+        "volumetrica ASTM D1250, y actualiza el estado a COMPLETADO o ALERTA_MERMA. "
+        "Requiere rol DESPACHADOR, SUPERVISOR o ADMIN."
     ),
+    dependencies=[Depends(require_roles(
+        RolUsuario.DESPACHADOR, RolUsuario.SUPERVISOR, RolUsuario.ADMIN
+    ))],
 )
 async def registrar_descarga(
     pedido_id: uuid.UUID = Path(..., description="UUID del pedido"),
@@ -295,9 +318,12 @@ async def registrar_descarga(
     response_model=PedidoDetalle,
     summary="Revisar y cerrar una alerta de merma",
     description=(
-        "Solo un supervisor puede autorizar el cierre de una alerta de merma. "
+        "Solo un supervisor o admin puede autorizar el cierre de una alerta de merma. "
         "Cambia el estado de ALERTA_MERMA a COMPLETADO."
     ),
+    dependencies=[Depends(require_roles(
+        RolUsuario.SUPERVISOR, RolUsuario.ADMIN
+    ))],
 )
 async def revisar_alerta(
     pedido_id: uuid.UUID = Path(..., description="UUID del pedido"),

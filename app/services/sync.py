@@ -54,7 +54,7 @@ class BatchSyncService:
         ]
         duplicados = len(puntos_ordenados) - len(puntos_nuevos)
 
-        # 4. Persistir en batch
+        # 4. Persistir en batch (incluyendo conductor_id si se pasa)
         if puntos_nuevos:
             entidades = [
                 TelemetriaRuta(
@@ -68,6 +68,7 @@ class BatchSyncService:
                     timestamp_gps=p.timestamp_gps,
                     timestamp_sync=timestamp_sync,
                     dispositivo_id=p.dispositivo_id or lote.dispositivo_id,
+                    conductor_id=getattr(self, "_conductor_id", None),
                 )
                 for p in puntos_nuevos
             ]

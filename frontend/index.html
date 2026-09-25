@@ -185,7 +185,7 @@
 
         <!-- Info del pedido seleccionado (overlay) -->
         <template x-if="pedidoSeleccionado">
-          <div class="absolute top-4 left-4 bg-slate-900/95 backdrop-blur border border-slate-700 rounded-lg p-3 shadow-xl max-w-xs">
+          <div class="absolute top-4 left-4 bg-slate-900/95 backdrop-blur border border-slate-700 rounded-lg p-3 shadow-xl max-w-xs" style="z-index: 1000;">
             <div class="text-xs text-slate-400 uppercase tracking-wider mb-1">Pedido seleccionado</div>
             <div class="text-sm font-bold text-white" x-text="pedidoSeleccionado.codigo"></div>
             <div class="text-xs text-slate-300 mt-1">
@@ -195,6 +195,64 @@
             </div>
             <div class="text-xs text-slate-400 mt-2">
               <span x-text="puntosTelemetria.length"></span> puntos GPS registrados
+            </div>
+
+            <!-- ═══ BARRA DE CONTROL DE ESTADO ═══ -->
+            <div class="mt-3 pt-3 border-t border-slate-700 space-y-2">
+              <div class="text-xs text-slate-500 uppercase tracking-wider mb-2">Acciones</div>
+
+              <!-- SOLICITADO → EN_TRANSITO -->
+              <template x-if="pedidoSeleccionado.estado === 'SOLICITADO'">
+                <button
+                  @click="cambiarEstadoPedido('EN_TRANSITO')"
+                  :disabled="cambiandoEstado"
+                  class="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-semibold py-2 rounded transition-colors"
+                >
+                  <span x-text="cambiandoEstado ? 'Procesando...' : '▶ Iniciar Tránsito'"></span>
+                </button>
+              </template>
+
+              <!-- EN_TRANSITO → DESPACHANDO -->
+              <template x-if="pedidoSeleccionado.estado === 'EN_TRANSITO'">
+                <button
+                  @click="cambiarEstadoPedido('DESPACHANDO')"
+                  :disabled="cambiandoEstado"
+                  class="w-full bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white text-xs font-semibold py-2 rounded transition-colors"
+                >
+                  <span x-text="cambiandoEstado ? 'Procesando...' : '⛽ Iniciar Despacho'"></span>
+                </button>
+              </template>
+
+              <!-- DESPACHANDO → modal descarga -->
+              <template x-if="pedidoSeleccionado.estado === 'DESPACHANDO'">
+                <button
+                  @click="abrirModalDescarga()"
+                  class="w-full bg-green-600 hover:bg-green-700 text-white text-xs font-semibold py-2 rounded transition-colors"
+                >
+                  ✓ Registrar Descarga y Cierre
+                </button>
+              </template>
+
+              <!-- ALERTA_MERMA → modal revisión -->
+              <template x-if="pedidoSeleccionado.estado === 'ALERTA_MERMA'">
+                <button
+                  @click="abrirModalRevision()"
+                  class="w-full bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold py-2 rounded transition-colors"
+                >
+                  ⚠ Revisar Alerta de Merma
+                </button>
+              </template>
+
+              <!-- Cancelar (excepto COMPLETADO/CANCELADO) -->
+              <template x-if="pedidoSeleccionado.estado !== 'COMPLETADO' && pedidoSeleccionado.estado !== 'CANCELADO'">
+                <button
+                  @click="cambiarEstadoPedido('CANCELADO')"
+                  :disabled="cambiandoEstado"
+                  class="w-full bg-slate-700 hover:bg-red-900/50 disabled:opacity-50 text-slate-300 text-xs font-semibold py-1.5 rounded transition-colors"
+                >
+                  Cancelar Pedido
+                </button>
+              </template>
             </div>
           </div>
         </template>
@@ -577,6 +635,220 @@
   </div>
 </template>
 
+<!-- ═══ MODAL: REGISTRAR DESCARGA ═══ -->
+<template x-if="modalDescarga">
+  <div
+    class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4"
+    @click.self="cerrarModalDescarga()"
+  >
+    <div class="bg-slate-900 border border-slate-700 rounded-xl max-w-xl w-full max-h-[90vh] overflow-y-auto scroll-fino shadow-2xl">
+
+      <!-- Header -->
+      <div class="flex items-center justify-between px-6 py-4 border-b border-slate-700 sticky top-0 bg-slate-900 z-10">
+        <h3 class="text-lg font-bold text-white">Registrar Descarga</h3>
+        <button @click="cerrarModalDescarga()" class="text-slate-400 hover:text-white transition-colors">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+          </svg>
+        </button>
+      </div>
+
+      <template x-if="errorModal">
+        <div class="mx-6 mt-4 p-3 bg-red-500/20 border border-red-500/50 rounded-lg">
+          <p class="text-sm text-red-300" x-text="errorModal"></p>
+        </div>
+      </template>
+
+      <!-- Info del pedido -->
+      <div class="px-6 pt-4">
+        <div class="bg-slate-800/50 rounded-lg p-3 border border-slate-700">
+          <div class="text-xs text-slate-400 uppercase tracking-wider mb-1">Pedido</div>
+          <div class="text-sm font-bold text-white" x-text="pedidoSeleccionado?.codigo"></div>
+          <div class="text-xs text-slate-400 mt-1">
+            Volumen cargado: <span class="text-white font-semibold" x-text="pedidoSeleccionado?.volumen_cargado_l?.toLocaleString('es-VE')"></span> L
+          </div>
+        </div>
+      </div>
+
+      <!-- Formulario -->
+      <div class="p-6 space-y-4">
+        <div>
+          <label class="block text-xs text-slate-400 mb-1">Volumen recibido (L)</label>
+          <input
+            type="number"
+            step="0.1"
+            x-model.number="formDescarga.volumen_recibido_l"
+            class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-blue-500"
+          />
+        </div>
+
+        <div>
+          <label class="block text-xs text-slate-400 mb-1">Temperatura de descarga (°C)</label>
+          <input
+            type="number"
+            step="0.1"
+            x-model.number="formDescarga.temperatura_descarga_c"
+            class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-blue-500"
+          />
+        </div>
+
+        <div>
+          <label class="block text-xs text-slate-400 mb-1">Odómetro final (km)</label>
+          <input
+            type="number"
+            step="0.1"
+            x-model.number="formDescarga.odometro_final_km"
+            class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-blue-500"
+          />
+        </div>
+
+        <div>
+          <label class="block text-xs text-slate-400 mb-1">Observaciones (opcional)</label>
+          <textarea
+            x-model="formDescarga.observaciones_descarga"
+            rows="2"
+            maxlength="255"
+            class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-blue-500 resize-none"
+          ></textarea>
+        </div>
+
+        <!-- Vista previa -->
+        <div class="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
+          <div class="text-xs text-slate-400 uppercase tracking-wider mb-3">Vista Previa</div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <div class="text-xs text-slate-500">Diferencia bruta</div>
+              <div class="text-lg font-bold" :class="getClasePreviewDiferencia()">
+                <span x-text="calcularDiferenciaBruta()"></span> L
+              </div>
+            </div>
+            <div>
+              <div class="text-xs text-slate-500">Discrepancia estimada</div>
+              <div class="text-lg font-bold" :class="getClasePreviewDiscrepancia()">
+                <span x-text="calcularDiscrepanciaEstimada()"></span> %
+              </div>
+            </div>
+          </div>
+          <div class="text-xs text-slate-500 mt-2">
+            Umbral de alerta: 0.70% · Tolerancia técnica: 0.35%
+          </div>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div class="flex items-center justify-end gap-3 px-6 py-4 border-t border-slate-700 bg-slate-900 sticky bottom-0">
+        <button
+          @click="cerrarModalDescarga()"
+          :disabled="guardandoDescarga"
+          class="px-4 py-2 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white text-sm font-semibold rounded-lg transition-colors"
+        >
+          Cancelar
+        </button>
+        <button
+          @click="registrarDescarga()"
+          :disabled="guardandoDescarga"
+          class="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-lg transition-colors flex items-center gap-2"
+        >
+          <template x-if="guardandoDescarga">
+            <span class="inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+          </template>
+          <span x-text="guardandoDescarga ? 'Registrando...' : 'Registrar Descarga'"></span>
+        </button>
+      </div>
+
+    </div>
+  </div>
+</template>
+
+<!-- ═══ MODAL: REVISAR ALERTA DE MERMA ═══ -->
+<template x-if="modalRevision">
+  <div
+    class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4"
+    @click.self="cerrarModalRevision()"
+  >
+    <div class="bg-slate-900 border border-slate-700 rounded-xl max-w-xl w-full shadow-2xl">
+
+      <!-- Header -->
+      <div class="flex items-center justify-between px-6 py-4 border-b border-slate-700">
+        <h3 class="text-lg font-bold text-amber-400">⚠ Revisar Alerta de Merma</h3>
+        <button @click="cerrarModalRevision()" class="text-slate-400 hover:text-white transition-colors">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+          </svg>
+        </button>
+      </div>
+
+      <template x-if="errorModal">
+        <div class="mx-6 mt-4 p-3 bg-red-500/20 border border-red-500/50 rounded-lg">
+          <p class="text-sm text-red-300" x-text="errorModal"></p>
+        </div>
+      </template>
+
+      <!-- Detalles de la alerta -->
+      <div class="px-6 pt-4">
+        <div class="bg-amber-950/30 border border-amber-700/50 rounded-lg p-3">
+          <div class="text-xs text-amber-300 uppercase tracking-wider mb-2">Datos de la alerta</div>
+          <div class="grid grid-cols-2 gap-2 text-xs">
+            <div>
+              <span class="text-slate-400">Discrepancia:</span>
+              <span class="text-red-400 font-bold ml-1" x-text="pedidoSeleccionado?.discrepancia_pct?.toFixed(2) + '%'"></span>
+            </div>
+            <div>
+              <span class="text-slate-400">Merma real:</span>
+              <span class="text-red-400 font-bold ml-1" x-text="pedidoSeleccionado?.merma_real_l?.toFixed(2) + ' L'"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="p-6 space-y-4">
+        <div>
+          <label class="block text-xs text-slate-400 mb-1">Autorizado por <span class="text-red-400">*</span></label>
+          <input
+            type="text"
+            x-model="formRevision.autorizado_por"
+            placeholder="Nombre del supervisor"
+            maxlength="100"
+            class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500"
+          />
+        </div>
+
+        <div>
+          <label class="block text-xs text-slate-400 mb-1">Observaciones (opcional)</label>
+          <textarea
+            x-model="formRevision.observaciones"
+            rows="3"
+            maxlength="500"
+            placeholder="Justificación del cierre de la alerta..."
+            class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 resize-none"
+          ></textarea>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end gap-3 px-6 py-4 border-t border-slate-700">
+        <button
+          @click="cerrarModalRevision()"
+          :disabled="guardandoRevision"
+          class="px-4 py-2 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white text-sm font-semibold rounded-lg transition-colors"
+        >
+          Cancelar
+        </button>
+        <button
+          @click="revisarAlerta()"
+          :disabled="guardandoRevision || !formRevision.autorizado_por.trim()"
+          class="px-4 py-2 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-lg transition-colors flex items-center gap-2"
+        >
+          <template x-if="guardandoRevision">
+            <span class="inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+          </template>
+          <span x-text="guardandoRevision ? 'Procesando...' : 'Autorizar Cierre'"></span>
+        </button>
+      </div>
+
+    </div>
+  </div>
+</template>
+
 <!-- Scripts -->
 <script src="js/config.js"></script>
 <script src="js/websocket.js"></script>
@@ -617,6 +889,27 @@ function dashboardApp() {
       destino_nombre: 'Estacion Servicio Caracas - Distrito Capital',
       destino_lat: 10.4806,
       destino_lon: -66.9036,
+    },
+
+    // Estado para cambio de estado
+    cambiandoEstado: false,
+
+    // Estado del modal de descarga
+    modalDescarga: false,
+    guardandoDescarga: false,
+    formDescarga: {
+      volumen_recibido_l: 0,
+      temperatura_descarga_c: 25.0,
+      odometro_final_km: 0,
+      observaciones_descarga: '',
+    },
+
+    // Estado del modal de revisión de alerta
+    modalRevision: false,
+    guardandoRevision: false,
+    formRevision: {
+      autorizado_por: '',
+      observaciones: '',
     },
 
     // ─── Inicialización ───────────────────────────────────────
@@ -902,6 +1195,192 @@ function dashboardApp() {
         this.errorModal = err.message || 'Error desconocido';
       } finally {
         this.guardandoPedido = false;
+      }
+    },
+
+    // ─── Cambio de estado del pedido ──────────────────────────
+    async cambiarEstadoPedido(nuevoEstado) {
+      if (!this.pedidoSeleccionado) return;
+
+      // Confirmación si es cancelación
+      if (nuevoEstado === 'CANCELADO' && !confirm('¿Seguro que quieres cancelar este pedido?')) {
+        return;
+      }
+
+      this.cambiandoEstado = true;
+
+      try {
+        const res = await fetch(
+          `${CONFIG.API_BASE_URL}/api/v1/pedidos/${this.pedidoSeleccionado.id}/estado`,
+          {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ estado: nuevoEstado }),
+          }
+        );
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
+          throw new Error(err.detail || 'Error cambiando estado');
+        }
+
+        const actualizado = await res.json();
+        console.log('[App] Estado actualizado:', actualizado.estado);
+
+        // Actualizar en la lista y en el seleccionado
+        const idx = this.pedidos.findIndex((p) => p.id === actualizado.id);
+        if (idx >= 0) this.pedidos[idx] = actualizado;
+        this.pedidoSeleccionado = actualizado;
+
+      } catch (err) {
+        console.error('[App] Error cambiando estado:', err);
+        alert(err.message || 'Error cambiando estado');
+      } finally {
+        this.cambiandoEstado = false;
+      }
+    },
+
+    // ─── Modal de descarga ────────────────────────────────────
+    abrirModalDescarga() {
+      if (!this.pedidoSeleccionado) return;
+
+      // Pre-llenar valores por defecto
+      this.formDescarga = {
+        volumen_recibido_l: parseFloat(this.pedidoSeleccionado.volumen_cargado_l) || 0,
+        temperatura_descarga_c: parseFloat(this.pedidoSeleccionado.temperatura_carga_c) || 25.0,
+        odometro_final_km: parseFloat(this.pedidoSeleccionado.odometro_inicial_km) || 0,
+        observaciones_descarga: '',
+      };
+
+      this.errorModal = null;
+      this.modalDescarga = true;
+    },
+
+    cerrarModalDescarga() {
+      if (this.guardandoDescarga) return;
+      this.modalDescarga = false;
+      this.errorModal = null;
+    },
+
+    calcularDiferenciaBruta() {
+      if (!this.pedidoSeleccionado) return '0.00';
+      const cargado = parseFloat(this.pedidoSeleccionado.volumen_cargado_l) || 0;
+      const recibido = parseFloat(this.formDescarga.volumen_recibido_l) || 0;
+      return (cargado - recibido).toFixed(2);
+    },
+
+    calcularDiscrepanciaEstimada() {
+      if (!this.pedidoSeleccionado) return '0.00';
+      const cargado = parseFloat(this.pedidoSeleccionado.volumen_cargado_l) || 0;
+      const recibido = parseFloat(this.formDescarga.volumen_recibido_l) || 0;
+      if (cargado <= 0) return '0.00';
+      const diff = Math.abs(cargado - recibido);
+      return ((diff / cargado) * 100).toFixed(3);
+    },
+
+    getClasePreviewDiferencia() {
+      if (!this.pedidoSeleccionado) return 'text-slate-500';
+      const diff = parseFloat(this.calcularDiferenciaBruta());
+      if (Math.abs(diff) < 1) return 'text-green-400';
+      if (Math.abs(diff) < 50) return 'text-yellow-400';
+      return 'text-red-400';
+    },
+
+    getClasePreviewDiscrepancia() {
+      const disc = parseFloat(this.calcularDiscrepanciaEstimada());
+      if (disc <= 0.35) return 'text-green-400';
+      if (disc <= 0.70) return 'text-yellow-400';
+      return 'text-red-400';
+    },
+
+    async registrarDescarga() {
+      if (!this.pedidoSeleccionado) return;
+
+      this.guardandoDescarga = true;
+      this.errorModal = null;
+
+      try {
+        const res = await fetch(
+          `${CONFIG.API_BASE_URL}/api/v1/pedidos/${this.pedidoSeleccionado.id}/descarga`,
+          {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(this.formDescarga),
+          }
+        );
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
+          throw new Error(err.detail || 'Error registrando descarga');
+        }
+
+        const actualizado = await res.json();
+        console.log('[App] Descarga registrada. Estado:', actualizado.estado);
+
+        // Actualizar en la lista y en el seleccionado
+        const idx = this.pedidos.findIndex((p) => p.id === actualizado.id);
+        if (idx >= 0) this.pedidos[idx] = actualizado;
+        this.pedidoSeleccionado = actualizado;
+
+        this.modalDescarga = false;
+
+      } catch (err) {
+        console.error('[App] Error registrando descarga:', err);
+        this.errorModal = err.message || 'Error desconocido';
+      } finally {
+        this.guardandoDescarga = false;
+      }
+    },
+
+    // ─── Modal de revisión de alerta ──────────────────────────
+    abrirModalRevision() {
+      if (!this.pedidoSeleccionado) return;
+      this.formRevision = { autorizado_por: '', observaciones: '' };
+      this.errorModal = null;
+      this.modalRevision = true;
+    },
+
+    cerrarModalRevision() {
+      if (this.guardandoRevision) return;
+      this.modalRevision = false;
+      this.errorModal = null;
+    },
+
+    async revisarAlerta() {
+      if (!this.pedidoSeleccionado || !this.formRevision.autorizado_por.trim()) return;
+
+      this.guardandoRevision = true;
+      this.errorModal = null;
+
+      try {
+        const res = await fetch(
+          `${CONFIG.API_BASE_URL}/api/v1/pedidos/${this.pedidoSeleccionado.id}/revisar-alerta`,
+          {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(this.formRevision),
+          }
+        );
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
+          throw new Error(err.detail || 'Error revisando alerta');
+        }
+
+        const actualizado = await res.json();
+        console.log('[App] Alerta revisada. Estado:', actualizado.estado);
+
+        const idx = this.pedidos.findIndex((p) => p.id === actualizado.id);
+        if (idx >= 0) this.pedidos[idx] = actualizado;
+        this.pedidoSeleccionado = actualizado;
+
+        this.modalRevision = false;
+
+      } catch (err) {
+        console.error('[App] Error revisando alerta:', err);
+        this.errorModal = err.message || 'Error desconocido';
+      } finally {
+        this.guardandoRevision = false;
       }
     },
 

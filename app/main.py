@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
-from app.routers import chat, telemetria
+from app.routers import chat, pedidos, telemetria
 
 
 app = FastAPI(
@@ -30,6 +30,7 @@ app.add_middleware(
 )
 
 # ─── Routers ──────────────────────────────────────────────────────────
+app.include_router(pedidos.router)
 app.include_router(telemetria.router)
 app.include_router(chat.router)
 

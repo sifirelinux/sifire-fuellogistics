@@ -71,6 +71,12 @@ class Pedido(Base, UUIDMixin, TimestampMixin):
     odometro_final_km: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
 
     vehiculo_placa: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    conductor_id: Mapped[uuid.UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("usuarios.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
 
     estado: Mapped[EstadoPedido] = mapped_column(
         SAEnum(EstadoPedido, name="estado_pedido_enum"),

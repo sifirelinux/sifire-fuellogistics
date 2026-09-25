@@ -35,7 +35,7 @@ async def chat_websocket(
 
     - Broadcast entre conductor, despachador y supervisor.
     - Sanitiza automaticamente telefonos, emails y cuentas bancarias.
-    - Registra conexion/desconexion como eventos de sistema.
+    - Acepta campo opcional 'nombre' para mostrar etiqueta amigable.
     """
     await manager.conectar(pedido_id, usuario_id, websocket)
 
@@ -113,6 +113,7 @@ async def _procesar_mensaje(
         tipo=mensaje_in.tipo,
         contenido=resultado.texto_limpio,
         audio_url=mensaje_in.audio_url,
+        nombre=mensaje_in.nombre,
         datos_sensibles_detectados=resultado.datos_sensibles_detectados,
         categorias_detectadas=list(resultado.categorias),
         timestamp=datetime.now(timezone.utc),

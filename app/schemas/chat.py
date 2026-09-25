@@ -21,6 +21,7 @@ class MensajeChatIn(BaseModel):
     tipo: TipoMensaje = TipoMensaje.TEXTO
     contenido: str = Field(..., min_length=1, max_length=5000)
     audio_url: str | None = Field(default=None, max_length=500)
+    nombre: str | None = Field(default=None, max_length=100)
 
 
 class MensajeChatOut(BaseModel):
@@ -34,6 +35,7 @@ class MensajeChatOut(BaseModel):
     tipo: TipoMensaje
     contenido: str
     audio_url: str | None = None
+    nombre: str | None = None
     datos_sensibles_detectados: int = 0
     categorias_detectadas: list[str] = Field(default_factory=list)
     timestamp: datetime

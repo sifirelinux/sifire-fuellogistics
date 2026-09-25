@@ -920,6 +920,14 @@ function dashboardApp() {
       await this.cargarPedidos();
       this.pollingTimer = setInterval(() => this.cargarPedidos(), CONFIG.POLL_INTERVAL_MS);
       this.pollingTimer = setInterval(() => this.verificarApi(), CONFIG.POLL_INTERVAL_MS);
+
+      // Reconectar WS al recuperar foco de la pestana
+      document.addEventListener('visibilitychange', () => {
+        if (!document.hidden && this.pedidoSeleccionado) {
+          console.log('[App] Volviendo al foco, reconectando WS');
+          this.conectarWebSocket(this.pedidoSeleccionado.id);
+        }
+      });
     },
 
     // ─── Mapa ─────────────────────────────────────────────────

@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0f172a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>SIFIRE Conductor</title>
+
+<link rel="manifest" href="./manifest.json">
+
+<!-- TailwindCSS -->
+<script src="https://cdn.tailwindcss.com"></script>
+
+<!-- Alpine.js -->
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+
+<style>
+  [x-cloak] { display: none !important; }
+
+  html, body {
+    height: 100%;
+    overscroll-behavior-y: none;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #020617;
+    color: #E2E8F0;
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .scroll-fino::-webkit-scrollbar { width: 4px; }
+  .scroll-fino::-webkit-scrollbar-track { background: #0f172a; }
+  .scroll-fino::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
+
+  @keyframes pulsoDuress {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+    50% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
+  }
+  .duress-pulse { animation: pulsoDuress 2s infinite; }
+
+  .pin-dot {
+    width: 14px; height: 14px; border-radius: 50%;
+    border: 2px solid #64748B;
+    transition: all 0.15s;
+  }
+  .pin-dot.filled { background: #3B82F6; border-color: #3B82F6; }
+
+  .keypad-btn {
+    user-select: none;
+    -webkit-user-select: none;
+    transition: all 0.1s;
+  }
+  .keypad-btn:active {
+    transform: scale(0.92);
+    background: #334155;
+  }
+</style>
+</head>
+<body x-data="conductorApp()" x-init="init()" x-cloak>
+
+<!-- ═══ HEADER ═══ -->
+<header class="fixed top-0 left-0 right-0 z-40 bg-slate-900 border-b border-slate-800 px-4 py-3 flex items-center justify-between" style="padding-top: max(0.75rem, env(safe-area-inset-top));">
+  <div class="flex items-center gap-3">
+    <div class="w-9 h-9 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold">
+      S
+    </div>
+    <div>
+      <div class="text-sm font-bold text-white">SIFIRE</div>
+      <div class="text-xs text-slate-400">Conductor</div>
+    </div>
+  </div>
+
+  <div class="flex items-center gap-3">
+    <!-- Contador de pendientes -->
+    <div class="text-right">
+      <div class="text-xs text-slate-500">En cola</div>
+      <div class="text-sm font-bold text-white" x-text="puntosPendientesSync"></div>
+    </div>
+
+    <!-- Estado conexion -->
+    <div class="flex items-center gap-2">
+      <span
+        :class="getColorConexion()"
+        class="w-2 h-2 rounded-full inline-block"
+      ></span>
+      <span class="text-xs text-slate-300" x-text="estadoConexion"></span>
+    </div>
+  </div>
+</header>
+
+<!-- ═══ CONTENIDO PRINCIPAL ═══ -->
+<main class="pt-20 pb-20 min-h-screen" style="padding-top: calc(5rem + env(safe-area-inset-top)); padding-bottom: calc(5rem + env(safe-area-inset-bottom));">
+
+
+  <!-- ══════════════ TAB: DASHBOARD ══════════════ -->
+  <div x-show="tabActiva === 'dashboard'" class="px-4 space-y-4">
+
+    <!-- Pedido activo -->
+    <template x-if="!pedidoActivo">
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+        <div class="text-sm text-slate-400 mb-3">Sin pedido asignado</div>
+        <button
+          @click="asignarPedido()"
+          class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition-colors"
+        >
+          + Asignar Pedido
+        </button>
+      </div>
+    </template>
+
+    <template x-if="pedidoActivo">
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+        <div class="flex items-start justify-between mb-3">
+          <div>
+            <div class="text-xs text-slate-500 uppercase tracking-wider">Pedido activo</div>
+            <div class="text-lg font-bold text-white" x-text="pedidoActivo.codigo"></div>
+          </div>
+          <button @click="cerrarPedido()" class="text-slate-500 hover:text-red-400 text-xs">✕</button>
+        </div>
+        <div class="text-xs text-slate-400 mb-1">
+          <span x-text="pedidoActivo.origen_nombre"></span>
+          <span class="text-slate-600 mx-1">→</span>
+          <span x-text="pedidoActivo.destino_nombre"></span>
+        </div>
+        <div class="text-xs text-slate-500">
+          <span x-text="pedidoActivo.volumen_cargado_l?.toLocaleString('es-VE')"></span> L
+          <span class="mx-2">·</span>
+          <span x-text="pedidoActivo.tipo_combustible"></span>
+        </div>
+      </div>
+    </template>
+
+    <!-- Control de tracking -->
+    <template x-if="pedidoActivo">
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+        <div class="text-xs text-slate-500 uppercase tracking-wider mb-3">Tracking GPS</div>
+
+        <button
+          x-show="!trackingActivo"
+          @click="iniciarTracking()"
+          class="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-4 rounded-lg transition-colors text-base"
+        >
+          ▶ Iniciar Tracking
+        </button>
+
+        <button
+          x-show="trackingActivo"
+          @click="detenerTracking()"
+          class="w-full bg-red-600 hover:bg-red-700 text-white font-semibold py-4 rounded-lg transition-colors text-base"
+        >
+          ■ Detener Tracking
+        </button>
+
+        <button
+          x-show="trackingActivo"
+          @click="sincronizarManual()"
+          class="w-full bg-slate-700 hover:bg-slate-600 text-white font-semibold py-2 rounded-lg transition-colors mt-2 text-sm"
+        >
+          ⟳ Sincronizar ahora
+        </button>
+      </div>
+    </template>
+
+    <!-- Posicion actual -->
+    <template x-if="trackingActivo">
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+        <div class="text-xs text-slate-500 uppercase tracking-wider mb-3">Posicion actual</div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div class="bg-slate-800 rounded-lg p-3">
+            <div class="text-xs text-slate-500">Latitud</div>
+            <div class="text-sm font-bold text-white" x-text="ultimaPosicion.lat?.toFixed(5) || '—'"></div>
+          </div>
+          <div class="bg-slate-800 rounded-lg p-3">
+            <div class="text-xs text-slate-500">Longitud</div>
+            <div class="text-sm font-bold text-white" x-text="ultimaPosicion.lon?.toFixed(5) || '—'"></div>
+          </div>
+          <div class="bg-slate-800 rounded-lg p-3">
+            <div class="text-xs text-slate-500">Velocidad</div>
+            <div class="text-sm font-bold text-white">
+              <span x-text="ultimaPosicion.velocidad?.toFixed(1) || '0.0'"></span> km/h
+            </div>
+          </div>
+          <div class="bg-slate-800 rounded-lg p-3">
+            <div class="text-xs text-slate-500">Precision</div>
+            <div class="text-sm font-bold text-white">
+              <span x-text="ultimaPosicion.precision?.toFixed(0) || '—'"></span> m
+            </div>
+          </div>
+        </div>
+
+        <div class="text-xs text-slate-500 mt-3">
+          Enviados esta sesion: <span class="text-slate-300 font-semibold" x-text="totalPuntosEnviados"></span>
+        </div>
+      </div>
+    </template>
+
+    <!-- Badge duress -->
+    <template x-if="esModoDuress">
+      <div class="bg-red-950/40 border border-red-800 rounded-xl p-3 flex items-center gap-3 duress-pulse">
+        <div class="w-2 h-2 bg-red-500 rounded-full"></div>
+        <div class="text-xs text-red-300">Modo silencioso activado</div>
+      </div>
+    </template>
+
+  </div>
+
+  <!-- ══════════════ TAB: PIN ══════════════ -->
+  <div x-show="tabActiva === 'pin'" class="px-4 space-y-4">
+
+    <template x-if="!autenticado">
+      <div>
+        <div class="text-center py-6">
+          <div class="text-sm text-slate-400 mb-1">Ingresa tu PIN</div>
+          <div class="text-xs text-slate-500">Para autenticarte</div>
+        </div>
+
+        <!-- Indicadores de PIN -->
+        <div class="flex justify-center gap-3 mb-8">
+          <template x-for="i in 4" :key="i">
+            <div
+              :class="pinIngresado.length >= i ? 'filled' : ''"
+              class="pin-dot"
+            ></div>
+          </template>
+        </div>
+
+        <!-- Keypad -->
+        <div class="grid grid-cols-3 gap-3 max-w-xs mx-auto">
+          <template x-for="n in [1,2,3,4,5,6,7,8,9]" :key="n">
+            <button
+              @click="ingresarPin(n)"
+              class="keypad-btn bg-slate-800 hover:bg-slate-700 text-white text-xl font-bold py-5 rounded-xl border border-slate-700"
+              x-text="n"
+            ></button>
+          </template>
+
+          <button
+            @click="pinIngresado = ''"
+            class="keypad-btn bg-slate-800 hover:bg-slate-700 text-slate-400 text-sm font-semibold py-5 rounded-xl border border-slate-700"
+          >
+            C
+          </button>
+
+          <button
+            @click="ingresarPin(0)"
+            class="keypad-btn bg-slate-800 hover:bg-slate-700 text-white text-xl font-bold py-5 rounded-xl border border-slate-700"
+          >
+            0
+          </button>
+
+          <button
+            @click="borrarPin()"
+            class="keypad-btn bg-slate-800 hover:bg-slate-700 text-slate-400 text-xl font-bold py-5 rounded-xl border border-slate-700"
+          >
+            ⌫
+          </button>
+        </div>
+      </div>
+    </template>
+
+    <template x-if="autenticado">
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-6 text-center">
+        <div class="w-16 h-16 bg-green-500/20 border border-green-500/50 rounded-full mx-auto mb-4 flex items-center justify-center">
+          <svg class="w-8 h-8 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+          </svg>
+        </div>
+        <div class="text-lg font-bold text-white mb-1">Autenticado</div>
+        <div class="text-xs text-slate-500">Sesion activa</div>
+        <button
+          @click="autenticado = false; pinIngresado = '';"
+          class="mt-4 text-xs text-slate-400 hover:text-white"
+        >
+          Cerrar sesion
+        </button>
+      </div>
+    </template>
+
+  </div>
+
+  <!-- ══════════════ TAB: CHAT ══════════════ -->
+  <div x-show="tabActiva === 'chat'" class="flex flex-col h-full">
+
+    <template x-if="!pedidoActivo">
+      <div class="px-4 py-12 text-center">
+        <div class="text-sm text-slate-500">Asigna un pedido para usar el chat</div>
+      </div>
+    </template>
+
+    <template x-if="pedidoActivo">
+      <div class="flex flex-col" style="height: calc(100vh - 10rem - env(safe-area-inset-top) - env(safe-area-inset-bottom));">
+
+        <!-- Estado WS -->
+        <div class="px-4 py-2 border-b border-slate-800 flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span
+              :class="{
+                'bg-green-500': wsEstado === 'conectado',
+                'bg-yellow-500': wsEstado === 'conectando' || wsEstado === 'reconectando',
+                'bg-red-500': wsEstado === 'desconectado' || wsEstado === 'error' || wsEstado === 'cerrado'
+              }"
+              class="w-2 h-2 rounded-full inline-block"
+            ></span>
+            <span class="text-xs text-slate-400" x-text="wsEstado"></span>
+          </div>
+          <div class="text-xs text-slate-500">Sanitizacion activa</div>
+        </div>
+
+        <!-- Mensajes -->
+        <div id="chat-scroll" class="flex-1 overflow-y-auto scroll-fino px-4 py-3 space-y-2">
+          <template x-if="mensajesChat.length === 0">
+            <div class="text-center text-slate-600 text-xs py-8">
+              Sin mensajes
+            </div>
+          </template>
+
+          <template x-for="(msg, idx) in mensajesChat" :key="idx">
+            <div>
+              <template x-if="msg.tipo === 'SISTEMA'">
+                <div class="text-center text-slate-500 text-xs italic py-1" x-text="msg.contenido"></div>
+              </template>
+
+              <template x-if="msg.tipo === 'ALERTA'">
+                <div class="bg-red-950/40 border border-red-800 rounded-lg p-3 text-xs text-red-300">
+                  ⚠ Alerta de emergencia
+                </div>
+              </template>
+
+              <template x-if="msg.tipo !== 'SISTEMA' && msg.tipo !== 'ALERTA'">
+                <div class="bg-slate-800 rounded-lg px-3 py-2 text-xs">
+                  <div class="flex items-center justify-between mb-1">
+                    <span class="font-semibold text-blue-400" x-text="msg.nombre || 'Usuario'"></span>
+                    <span class="text-slate-500" x-text="formatHora(msg.timestamp)"></span>
+                  </div>
+                  <div class="text-slate-200" x-text="msg.contenido"></div>
+                </div>
+              </template>
+            </div>
+          </template>
+        </div>
+
+        <!-- Input -->
+        <div class="p-3 border-t border-slate-800 bg-slate-900">
+          <div class="flex gap-2">
+            <input
+              type="text"
+              x-model="nuevoMensaje"
+              @keydown.enter="enviarMensaje()"
+              :disabled="wsEstado !== 'conectado'"
+              placeholder="Escribe un mensaje..."
+              class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 disabled:opacity-50"
+            />
+            <button
+              @click="enviarMensaje()"
+              :disabled="wsEstado !== 'conectado' || !nuevoMensaje.trim()"
+              class="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-semibold"
+            >
+              Enviar
+            </button>
+          </div>
+        </div>
+      </div>
+    </template>
+
+  </div>
+
+</main>
+
+<!-- ═══ TABS INFERIOR ═══ -->
+<nav class="fixed bottom-0 left-0 right-0 z-40 bg-slate-900 border-t border-slate-800" style="padding-bottom: env(safe-area-inset-bottom);">
+  <div class="grid grid-cols-3">
+    <button
+      @click="setTab('dashboard')"
+      :class="tabActiva === 'dashboard' ? 'text-blue-400 border-blue-500' : 'text-slate-500 border-transparent'"
+      class="py-3 flex flex-col items-center gap-1 border-t-2 transition-colors"
+    >
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
+      </svg>
+      <span class="text-xs font-semibold">Dashboard</span>
+    </button>
+
+    <button
+      @click="setTab('pin')"
+      :class="tabActiva === 'pin' ? 'text-blue-400 border-blue-500' : 'text-slate-500 border-transparent'"
+      class="py-3 flex flex-col items-center gap-1 border-t-2 transition-colors"
+    >
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+      </svg>
+      <span class="text-xs font-semibold">PIN</span>
+    </button>
+
+    <button
+      @click="setTab('chat')"
+      :class="tabActiva === 'chat' ? 'text-blue-400 border-blue-500' : 'text-slate-500 border-transparent'"
+      class="py-3 flex flex-col items-center gap-1 border-t-2 transition-colors"
+    >
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
+      </svg>
+      <span class="text-xs font-semibold">Chat</span>
+    </button>
+  </div>
+</nav>
+
+<!-- Scripts -->
+<script src="js/gps_offline.js"></script>
+<script src="js/websocket.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

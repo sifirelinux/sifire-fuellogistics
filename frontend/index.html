@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>S.I.F.I.R.E. FuelLogistics - Panel del Despachador</title>
+
+<!-- TailwindCSS CDN -->
+<script src="https://cdn.tailwindcss.com"></script>
+
+<!-- Leaflet CSS -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<!-- Alpine.js (defer) -->
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+
+<style>
+  [x-cloak] { display: none !important; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #0F172A;
+    color: #E2E8F0;
+  }
+
+  #mapa {
+    position: absolute;
+    inset: 0;
+    background: #1E293B;
+    z-index: 1;
+  }
+
+  /* El contenedor padre del mapa debe ser relative */
+  .mapa-wrapper {
+    position: relative;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  .scroll-fino::-webkit-scrollbar { width: 6px; }
+  .scroll-fino::-webkit-scrollbar-track { background: #1E293B; }
+  .scroll-fino::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
+  .scroll-fino::-webkit-scrollbar-thumb:hover { background: #64748B; }
+
+  @keyframes pulsar {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+  .badge-pulsante { animation: pulsar 1.5s infinite; }
+
+  .leaflet-container {
+    background: #1E293B;
+    border-radius: 8px;
+  }
+</style>
+</head>
+<body x-data="dashboardApp()" x-init="init()" x-cloak>
+
+<!-- ═══════════════════ LAYOUT PRINCIPAL ═══════════════════ -->
+<div class="h-screen flex flex-col overflow-hidden">
+
+  <!-- ═══ HEADER SUPERIOR ═══ -->
+  <header class="bg-slate-900 border-b border-slate-700 px-6 py-3 flex items-center justify-between flex-shrink-0">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold text-lg shadow-lg">
+        S
+      </div>
+      <div>
+        <h1 class="text-lg font-bold tracking-tight text-white">S.I.F.I.R.E. FuelLogistics</h1>
+        <p class="text-xs text-slate-400">Panel del Despachador · S.I.F.I.R.E. Servicios Tecnológicos</p>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-4">
+      <!-- Badge API Live -->
+      <div class="flex items-center gap-2">
+        <span
+          :class="apiLive ? 'bg-green-500' : 'bg-red-500'"
+          class="w-2 h-2 rounded-full inline-block"
+        ></span>
+        <span class="text-xs text-slate-300" x-text="apiLive ? 'API Live' : 'API Offline'"></span>
+      </div>
+
+      <!-- Contador de pedidos -->
+      <div class="text-xs text-slate-400">
+        <span x-text="pedidos.length"></span> pedidos
+      </div>
+    </div>
+  </header>
+
+
+  <!-- ═══ ÁREA PRINCIPAL (SIDEBAR + MAPA) ═══ -->
+  <div class="flex-1 flex overflow-hidden">
+
+    <!-- ═══ SIDEBAR IZQUIERDO ═══ -->
+    <aside class="w-80 bg-slate-900 border-r border-slate-700 flex flex-col flex-shrink-0">
+
+      <!-- Título sidebar -->
+      <div class="px-4 py-3 border-b border-slate-700">
+        <h2 class="text-sm font-semibold text-slate-200 uppercase tracking-wider">Pedidos Activos</h2>
+        <p class="text-xs text-slate-500 mt-1">Actualización cada <span x-text="CONFIG.POLL_INTERVAL_MS / 1000"></span>s</p>
+      </div>
+
+      <!-- Lista de pedidos -->
+      <div class="flex-1 overflow-y-auto scroll-fino">
+
+        <!-- Loading -->
+        <template x-if="cargandoPedidos">
+          <div class="p-6 text-center text-slate-500 text-sm">
+            <div class="inline-block w-6 h-6 border-2 border-slate-600 border-t-blue-500 rounded-full animate-spin mb-2"></div>
+            <p>Cargando pedidos...</p>
+          </div>
+        </template>
+
+        <!-- Sin pedidos -->
+        <template x-if="!cargandoPedidos && pedidos.length === 0">
+          <div class="p-6 text-center text-slate-500 text-sm">
+            <p>No hay pedidos registrados.</p>
+          </div>
+        </template>
+
+        <!-- Lista -->
+        <template x-for="pedido in pedidos" :key="pedido.id">
+          <div
+            @click="seleccionarPedido(pedido)"
+            :class="pedidoSeleccionado && pedidoSeleccionado.id === pedido.id
+              ? 'bg-blue-900/40 border-l-4 border-blue-500'
+              : 'hover:bg-slate-800/60 border-l-4 border-transparent'"
+            class="px-4 py-3 border-b border-slate-800 cursor-pointer transition-colors"
+          >
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-sm font-bold text-white" x-text="pedido.codigo"></span>
+              <span
+                :class="getClaseBadge(pedido.estado)"
+                class="text-xs px-2 py-0.5 rounded-full border font-semibold"
+                x-text="pedido.estado"
+              ></span>
+            </div>
+            <div class="text-xs text-slate-400 truncate" x-text="pedido.origen_nombre"></div>
+            <div class="text-xs text-slate-500 truncate">→ <span x-text="pedido.destino_nombre"></span></div>
+            <div class="flex items-center justify-between mt-2">
+              <span class="text-xs text-slate-400">
+                <span x-text="pedido.volumen_cargado_l.toLocaleString('es-VE')"></span> L
+              </span>
+              <span class="text-xs text-slate-500" x-text="pedido.tipo_combustible"></span>
+            </div>
+          </div>
+        </template>
+      </div>
+
+    </aside>
+
+    <!-- ═══ ÁREA CENTRAL: MAPA ═══ -->
+    <main class="flex-1 flex flex-col overflow-hidden">
+
+      <!-- Mapa -->
+      <div class="mapa-wrapper">
+        <div id="mapa"></div>
+
+        <!-- Mensaje si no hay pedido seleccionado -->
+        <template x-if="!pedidoSeleccionado">
+          <div class="absolute inset-0 flex items-center justify-center bg-slate-900/80 backdrop-blur-sm pointer-events-none">
+            <div class="text-center">
+              <svg class="w-16 h-16 mx-auto text-slate-600 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"></path>
+              </svg>
+              <p class="text-slate-400 text-sm">Selecciona un pedido para ver su ruta</p>
+            </div>
+          </div>
+        </template>
+
+        <!-- Info del pedido seleccionado (overlay) -->
+        <template x-if="pedidoSeleccionado">
+          <div class="absolute top-4 left-4 bg-slate-900/95 backdrop-blur border border-slate-700 rounded-lg p-3 shadow-xl max-w-xs">
+            <div class="text-xs text-slate-400 uppercase tracking-wider mb-1">Pedido seleccionado</div>
+            <div class="text-sm font-bold text-white" x-text="pedidoSeleccionado.codigo"></div>
+            <div class="text-xs text-slate-300 mt-1">
+              <span x-text="pedidoSeleccionado.origen_nombre"></span>
+              <span class="text-slate-500 mx-1">→</span>
+              <span x-text="pedidoSeleccionado.destino_nombre"></span>
+            </div>
+            <div class="text-xs text-slate-400 mt-2">
+              <span x-text="puntosTelemetria.length"></span> puntos GPS registrados
+            </div>
+          </div>
+        </template>
+      </div>
+
+
+      <!-- ═══ PANEL INFERIOR: CHAT + AUDITORÍA ═══ -->
+      <div class="h-80 flex border-t border-slate-700 bg-slate-900 flex-shrink-0">
+
+        <!-- ═══ CHAT (izquierda) ═══ -->
+        <div class="w-1/2 flex flex-col border-r border-slate-700">
+
+          <div class="px-4 py-2 border-b border-slate-700 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <h3 class="text-sm font-semibold text-slate-200 uppercase tracking-wider">Chat en Vivo</h3>
+              <span class="text-xs bg-green-500/20 text-green-300 border border-green-500/50 px-2 py-0.5 rounded-full font-semibold">
+                Sanitización Activa
+              </span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span
+                :class="{
+                  'bg-green-500': wsEstado === 'conectado',
+                  'bg-yellow-500': wsEstado === 'conectando' || wsEstado === 'reconectando',
+                  'bg-red-500': wsEstado === 'desconectado' || wsEstado === 'error' || wsEstado === 'cerrado'
+                }"
+                class="w-2 h-2 rounded-full inline-block"
+              ></span>
+              <span class="text-xs text-slate-400" x-text="wsEstado"></span>
+            </div>
+          </div>
+
+          <!-- Historial de mensajes -->
+          <div x-ref="chatScroll" class="flex-1 overflow-y-auto scroll-fino p-3 space-y-2">
+            <template x-if="!pedidoSeleccionado">
+              <div class="h-full flex items-center justify-center text-slate-500 text-xs">
+                Selecciona un pedido para activar el chat
+              </div>
+            </template>
+
+            <template x-if="pedidoSeleccionado && mensajesChat.length === 0">
+              <div class="h-full flex items-center justify-center text-slate-500 text-xs">
+                Sin mensajes aún
+              </div>
+            </template>
+
+            <template x-for="(msg, idx) in mensajesChat" :key="idx">
+              <div class="text-xs">
+                <!-- Sistema -->
+                <template x-if="msg.tipo === 'SISTEMA'">
+                  <div class="text-center text-slate-500 italic" x-text="msg.contenido"></div>
+                </template>
+
+                <!-- Mensaje normal -->
+                <template x-if="msg.tipo !== 'SISTEMA'">
+                  <div class="bg-slate-800 rounded-lg px-3 py-2">
+                    <div class="flex items-center justify-between mb-1">
+                      <span class="font-semibold text-blue-400" x-text="nombreMostrar(msg)"></span>
+                      <span class="text-slate-500" x-text="horaCorta(msg.timestamp)"></span>
+                    </div>
+                    <div class="text-slate-200" x-text="msg.contenido"></div>
+                    <!-- Indicador de sanitización -->
+                    <template x-if="msg.datos_sensibles_detectados > 0">
+                      <div class="mt-1 text-xs text-amber-400">
+                        ⚠ <span x-text="msg.datos_sensibles_detectados"></span> dato(s) sensibles sanitizados
+                      </div>
+                    </template>
+                  </div>
+                </template>
+              </div>
+            </template>
+          </div>
+
+          <!-- Input de chat -->
+          <div class="p-2 border-t border-slate-700">
+            <div class="flex gap-2">
+              <input
+                type="text"
+                x-model="nuevoMensaje"
+                @keydown.enter="enviarMensaje()"
+                :disabled="!pedidoSeleccionado || wsEstado !== 'conectado'"
+                placeholder="Escribe un mensaje..."
+                class="flex-1 bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 disabled:opacity-50"
+              />
+              <button
+                @click="enviarMensaje()"
+                :disabled="!pedidoSeleccionado || wsEstado !== 'conectado' || !nuevoMensaje.trim()"
+                class="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded text-sm font-semibold transition-colors"
+              >
+                Enviar
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ═══ AUDITORÍA VOLUMÉTRICA (derecha) ═══ -->
+        <div class="w-1/2 flex flex-col">
+
+          <div class="px-4 py-2 border-b border-slate-700">
+            <h3 class="text-sm font-semibold text-slate-200 uppercase tracking-wider">
+              Auditoría Volumétrica <span class="text-slate-500 normal-case font-normal">· ASTM D1250</span>
+            </h3>
+          </div>
+
+          <div class="flex-1 overflow-y-auto scroll-fino p-4">
+            <template x-if="!pedidoSeleccionado">
+              <div class="h-full flex items-center justify-center text-slate-500 text-xs">
+                Selecciona un pedido para ver la auditoría
+              </div>
+            </template>
+
+            <template x-if="pedidoSeleccionado">
+              <div class="grid grid-cols-2 gap-3">
+                <!-- Volumen cargado -->
+                <div class="bg-slate-800 rounded-lg p-3 border border-slate-700">
+                  <div class="text-xs text-slate-400 uppercase tracking-wider mb-1">Volumen cargado</div>
+                  <div class="text-lg font-bold text-white">
+                    <span x-text="pedidoSeleccionado.volumen_cargado_l.toLocaleString('es-VE')"></span> L
+                  </div>
+                </div>
+
+                <!-- Temperatura carga -->
+                <div class="bg-slate-800 rounded-lg p-3 border border-slate-700">
+                  <div class="text-xs text-slate-400 uppercase tracking-wider mb-1">Temperatura carga</div>
+                  <div class="text-lg font-bold text-white">
+                    <span x-text="pedidoSeleccionado.temperatura_carga_c.toFixed(1)"></span> °C
+                  </div>
+                </div>
+
+                <!-- Volumen recibido -->
+                <div class="bg-slate-800 rounded-lg p-3 border border-slate-700">
+                  <div class="text-xs text-slate-400 uppercase tracking-wider mb-1">Volumen recibido</div>
+                  <div class="text-lg font-bold text-white">
+                    <template x-if="pedidoSeleccionado.volumen_recibido_l !== null && pedidoSeleccionado.volumen_recibido_l !== undefined">
+                      <span x-text="pedidoSeleccionado.volumen_recibido_l.toLocaleString('es-VE') + ' L'"></span>
+                    </template>
+                    <template x-if="pedidoSeleccionado.volumen_recibido_l === null || pedidoSeleccionado.volumen_recibido_l === undefined">
+                      <span class="text-slate-500">—</span>
+                    </template>
+                  </div>
+                </div>
+
+                <!-- Temperatura descarga -->
+                <div class="bg-slate-800 rounded-lg p-3 border border-slate-700">
+                  <div class="text-xs text-slate-400 uppercase tracking-wider mb-1">Temp. descarga</div>
+                  <div class="text-lg font-bold text-white">
+                    <template x-if="pedidoSeleccionado.temperatura_descarga_c !== null && pedidoSeleccionado.temperatura_descarga_c !== undefined">
+                      <span x-text="pedidoSeleccionado.temperatura_descarga_c.toFixed(1) + ' °C'"></span>
+                    </template>
+                    <template x-if="pedidoSeleccionado.temperatura_descarga_c === null || pedidoSeleccionado.temperatura_descarga_c === undefined">
+                      <span class="text-slate-500">—</span>
+                    </template>
+                  </div>
+                </div>
+
+                <!-- Discrepancia -->
+                <div class="col-span-2 bg-slate-800 rounded-lg p-3 border border-slate-700">
+                  <div class="text-xs text-slate-400 uppercase tracking-wider mb-2">Evaluación de merma</div>
+                  <div class="flex items-center justify-between">
+                    <div>
+                      <span class="text-xs text-slate-400">Discrepancia</span>
+                      <div class="text-2xl font-bold" :class="getClaseMerma()">
+                        <template x-if="pedidoSeleccionado.discrepancia_pct !== null && pedidoSeleccionado.discrepancia_pct !== undefined">
+                          <span x-text="pedidoSeleccionado.discrepancia_pct.toFixed(2) + ' %'"></span>
+                        </template>
+                        <template x-if="pedidoSeleccionado.discrepancia_pct === null || pedidoSeleccionado.discrepancia_pct === undefined">
+                          <span class="text-slate-500">—</span>
+                        </template>
+                      </div>
+                    </div>
+                    <div>
+                      <span
+                        :class="getClaseBadgeMerma()"
+                        class="text-xs px-3 py-1 rounded-full border font-bold uppercase tracking-wider"
+                        x-text="getEstadoMerma()"
+                      ></span>
+                    </div>
+                  </div>
+                  <div class="text-xs text-slate-500 mt-2">
+                    Tolerancia técnica: <span class="text-slate-300">0.35%</span>
+                  </div>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<!-- Scripts -->
+<script src="js/config.js"></script>
+<script src="js/websocket.js"></script>
+<script>
+function dashboardApp() {
+  return {
+    // Estado
+    pedidos: [],
+    pedidoSeleccionado: null,
+    mensajesChat: [],
+    nuevoMensaje: '',
+    puntosTelemetria: [],
+    apiLive: false,
+    cargandoPedidos: true,
+    wsEstado: 'cerrado',
+    wsCliente: null,
+    pollingTimer: null,
+    mapa: null,
+    capaPolyline: null,
+    capaMarcadores: null,
+    capaOrigenDestino: null,
+    CONFIG: CONFIG,
+
+    // ─── Inicialización ───────────────────────────────────────
+    async init() {
+      console.log('[App] Iniciando dashboard');
+      this.initMapa();
+      await this.verificarApi();
+      await this.cargarPedidos();
+      this.pollingTimer = setInterval(() => this.cargarPedidos(), CONFIG.POLL_INTERVAL_MS);
+      this.pollingTimer = setInterval(() => this.verificarApi(), CONFIG.POLL_INTERVAL_MS);
+    },
+
+    // ─── Mapa ─────────────────────────────────────────────────
+    initMapa() {
+      // Guarda: evita doble inicializacion si Alpine reactiva
+      if (this.mapa) {
+        console.log('[App] Mapa ya inicializado, omitiendo');
+        return;
+      }
+
+      this.mapa = L.map('mapa', {
+        center: CONFIG.DEFAULT_CENTER,
+        zoom: CONFIG.DEFAULT_ZOOM,
+        zoomControl: true,
+      });
+
+      // Tile layer OpenStreetMap estándar (sin API key)
+      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors',
+        maxZoom: 19,
+      }).addTo(this.mapa);
+
+      // Forzar recalculo de tamaño tras el render del layout
+      setTimeout(() => this.mapa.invalidateSize(), 200);
+      window.addEventListener('resize', () => this.mapa.invalidateSize());
+    },
+
+    // ─── API ──────────────────────────────────────────────────
+    async verificarApi() {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 15000);
+        const res = await fetch(CONFIG.API_BASE_URL + CONFIG.ENDPOINTS.HEALTH, {
+          signal: controller.signal,
+        });
+        clearTimeout(timeout);
+        this.apiLive = res.ok;
+      } catch (err) {
+        console.warn('[App] API check fallido:', err.message);
+        this.apiLive = false;
+      }
+    },
+
+    async cargarPedidos() {
+      try {
+        const res = await fetch(CONFIG.API_BASE_URL + CONFIG.ENDPOINTS.PEDIDOS);
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        this.pedidos = data.items;
+        this.cargandoPedidos = false;
+      } catch (err) {
+        console.error('[App] Error cargando pedidos:', err);
+        this.cargandoPedidos = false;
+      }
+    },
+
+    // ─── Selección de pedido ──────────────────────────────────
+    async seleccionarPedido(pedido) {
+      this.pedidoSeleccionado = pedido;
+      this.mensajesChat = [];
+      this.puntosTelemetria = [];
+
+      // Desconectar WS anterior
+      if (this.wsCliente) {
+        this.wsCliente.disconnect();
+        this.wsCliente = null;
+      }
+
+      // Cargar telemetría
+      await this.cargarTelemetria(pedido.id);
+
+      // Conectar WS nuevo
+      this.conectarWebSocket(pedido.id);
+
+      // Reencuadrar mapa
+      setTimeout(() => this.mapa.invalidateSize(), 100);
+    },
+
+    async cargarTelemetria(pedidoId) {
+      try {
+        const res = await fetch(CONFIG.API_BASE_URL + CONFIG.ENDPOINTS.TELEMETRIA(pedidoId));
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const puntos = await res.json();
+        this.puntosTelemetria = puntos;
+        this.dibujarRuta(puntos);
+      } catch (err) {
+        console.error('[App] Error telemetría:', err);
+        this.puntosTelemetria = [];
+        this.limpiarMapa();
+      }
+    },
+
+    // ─── Dibujo en el mapa ────────────────────────────────────
+    limpiarMapa() {
+      if (this.capaPolyline) { this.mapa.removeLayer(this.capaPolyline); this.capaPolyline = null; }
+      if (this.capaMarcadores) { this.mapa.removeLayer(this.capaMarcadores); this.capaMarcadores = null; }
+      if (this.capaOrigenDestino) { this.mapa.removeLayer(this.capaOrigenDestino); this.capaOrigenDestino = null; }
+    },
+
+    dibujarRuta(puntos) {
+      this.limpiarMapa();
+      const p = this.pedidoSeleccionado;
+
+      // Validar coordenadas del pedido (evita Invalid LatLng)
+      const origenValido = Number.isFinite(p.origen_lat) && Number.isFinite(p.origen_lon);
+      const destinoValido = Number.isFinite(p.destino_lat) && Number.isFinite(p.destino_lon);
+
+      if (!origenValido || !destinoValido) {
+        console.warn('[Mapa] Coordenadas invalidas en el pedido:', p);
+        return;
+      }
+
+      // Marcadores origen y destino
+      const grupoOD = L.layerGroup([
+        L.marker([p.origen_lat, p.origen_lon]).bindPopup('<b>Origen</b><br>' + p.origen_nombre),
+        L.marker([p.destino_lat, p.destino_lon]).bindPopup('<b>Destino</b><br>' + p.destino_nombre),
+      ]).addTo(this.mapa);
+      this.capaOrigenDestino = grupoOD;
+
+      if (!puntos || puntos.length === 0) {
+        this.mapa.fitBounds([[p.origen_lat, p.origen_lon], [p.destino_lat, p.destino_lon]], { padding: [40, 40] });
+        return;
+      }
+
+      // Polyline con los puntos GPS
+      const coords = puntos.map(pt => [pt.latitud, pt.longitud]);
+      this.capaPolyline = L.polyline(coords, {
+        color: '#3B82F6',
+        weight: 4,
+        opacity: 0.85,
+      }).addTo(this.mapa);
+
+      // Marcadores de cada punto
+      const marcadores = puntos.map(pt =>
+        L.circleMarker([pt.latitud, pt.longitud], {
+          radius: 4,
+          fillColor: '#60A5FA',
+          color: '#1E40AF',
+          weight: 1,
+          fillOpacity: 0.8,
+        }).bindPopup(`Lat: ${pt.latitud.toFixed(5)}<br>Lon: ${pt.longitud.toFixed(5)}<br>Vel: ${pt.velocidad_kmh || '—'} km/h`)
+      );
+      this.capaMarcadores = L.layerGroup(marcadores).addTo(this.mapa);
+
+      // Ajustar vista
+      this.mapa.fitBounds(this.capaPolyline.getBounds(), { padding: [40, 40] });
+    },
+
+    // ─── WebSocket ────────────────────────────────────────────
+    conectarWebSocket(pedidoId) {
+      const self = this;
+      this.wsCliente = new ChatWebSocketClient(pedidoId, CONFIG.USUARIO_ID, {
+        onMessage: (msg) => self.recibirMensaje(msg),
+        onStatusChange: (estado) => { self.wsEstado = estado; },
+      });
+      this.wsCliente.connect();
+    },
+
+    recibirMensaje(msg) {
+      this.mensajesChat.push(msg);
+      this.$nextTick(() => {
+        if (this.$refs.chatScroll) {
+          this.$refs.chatScroll.scrollTop = this.$refs.chatScroll.scrollHeight;
+        }
+      });
+    },
+
+    enviarMensaje() {
+      if (!this.nuevoMensaje.trim() || !this.wsCliente) return;
+
+      // Enviar con nombre del despachador
+      const payload = {
+        tipo: 'TEXTO',
+        contenido: this.nuevoMensaje,
+        nombre: CONFIG.NOMBRE_DESPACHADOR,
+      };
+
+      // Enviar directamente con el payload personalizado
+      if (this.wsCliente.ws && this.wsCliente.ws.readyState === WebSocket.OPEN) {
+        this.wsCliente.ws.send(JSON.stringify(payload));
+      }
+
+      this.nuevoMensaje = '';
+    },
+
+    // ─── Helpers de presentación ──────────────────────────────
+    getClaseBadge(estado) {
+      const c = CONFIG.ESTADO_COLORES[estado] || CONFIG.ESTADO_COLORES.CANCELADO;
+      return `${c.bg} ${c.text} ${c.border}`;
+    },
+
+    getEstadoMerma() {
+      if (!this.pedidoSeleccionado || this.pedidoSeleccionado.discrepancia_pct == null) return 'SIN DATOS';
+      const d = this.pedidoSeleccionado.discrepancia_pct;
+      if (d <= 0.35) return 'OK';
+      if (d <= 0.70) return 'ADVERTENCIA';
+      return 'CRÍTICA';
+    },
+
+    getClaseMerma() {
+      if (!this.pedidoSeleccionado || this.pedidoSeleccionado.discrepancia_pct == null) return 'text-slate-500';
+      const d = this.pedidoSeleccionado.discrepancia_pct;
+      if (d <= 0.35) return 'text-green-400';
+      if (d <= 0.70) return 'text-yellow-400';
+      return 'text-red-400';
+    },
+
+    getClaseBadgeMerma() {
+      if (!this.pedidoSeleccionado || this.pedidoSeleccionado.discrepancia_pct == null) return 'bg-slate-700 text-slate-400 border-slate-600';
+      const d = this.pedidoSeleccionado.discrepancia_pct;
+      if (d <= 0.35) return 'bg-green-500/20 text-green-300 border-green-500/50';
+      if (d <= 0.70) return 'bg-yellow-500/20 text-yellow-300 border-yellow-500/50';
+      return 'bg-red-500/20 text-red-300 border-red-500/50';
+    },
+
+    nombreMostrar(msg) {
+      if (msg.nombre) return msg.nombre;
+      // Si es nuestro propio UUID, mostrar nuestro nombre
+      if (msg.usuario_id === CONFIG.USUARIO_ID) return CONFIG.NOMBRE_DESPACHADOR;
+      // Fallback: primeros 8 chars del UUID
+      return 'Usuario ' + msg.usuario_id.slice(0, 8);
+    },
+
+    horaCorta(iso) {
+      try {
+        return new Date(iso).toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' });
+      } catch {
+        return '';
+      }
+    },
+  };
+}
+</script>
+</body>
+</html>

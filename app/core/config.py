@@ -9,6 +9,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
+    # ─── Aplicacion ──────────────────────────────────────────────────
     APP_NAME: str = "S.I.F.I.R.E. FuelLogistics"
     ENVIRONMENT: str = "development"
     DEBUG: bool = False
@@ -16,10 +17,17 @@ class Settings(BaseSettings):
     QR_HANDSHAKE_HMAC_KEY: str = "dev-hmac-key-change-in-production"
     FERNET_KEY: str = ""
 
+    # ─── Base de datos ───────────────────────────────────────────────
     DATABASE_URL: str = "postgresql+asyncpg://sifire:sifire_dev_password@localhost:5432/fuellogistics"
     DATABASE_URL_SYNC: str = "postgresql://sifire:sifire_dev_password@localhost:5432/fuellogistics"
 
+    # ─── CORS ────────────────────────────────────────────────────────
     CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://localhost:8000"]
+
+    # ─── VAPID (Notificaciones Push) ─────────────────────────────────
+    VAPID_PUBLIC_KEY: str = ""
+    VAPID_PRIVATE_KEY: str = ""
+    VAPID_SUBJECT: str = "mailto:sifiregarcia@gmail.com"
 
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
@@ -36,6 +44,11 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.ENVIRONMENT == "production"
+
+    @property
+    def push_enabled(self) -> bool:
+        """True si las notificaciones push estan configuradas."""
+        return bool(self.VAPID_PUBLIC_KEY and self.VAPID_PRIVATE_KEY)
 
 
 @lru_cache

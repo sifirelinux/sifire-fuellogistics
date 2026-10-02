@@ -25,3 +25,6 @@ httpx>=0.27
 
 # Logging estructurado
 structlog>=24.1
+
+# Notificaciones push (FASE 10)
+pywebpush>=2.0
